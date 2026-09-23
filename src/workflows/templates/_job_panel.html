@@ -1,16 +1,16 @@
 <div class="run-head">
   <div style="display:grid;gap:8px">
     <div class="row">
-      <span class="tag {{ 'run' if detail.status == 'running' else ('ok' if detail.status == 'succeeded' else ('bad' if detail.status in ('failed', 'cancelled') else 'wait')) }}">{{ detail.status }}</span>
+      <span class="tag {{ 'run' if detail.status == 'running' else ('ok' if detail.status == 'succeeded' else ('bad' if detail.status in ('failed', 'cancelled') else 'wait')) }}">{{ detail.status|status_label }}</span>
       <span class="tag">{{ detail.type }}</span>
       <span class="muted num">#{{ detail.id }}{% if detail.owner %} · {{ detail.owner }}{% endif %}</span>
     </div>
     <h1>{{ detail.result.title if detail.result and detail.result.title else job_type.title ~ ' job #' ~ detail.id }}</h1>
   </div>
   <div class="kv" style="min-width:220px">
-    {% if detail.eta_seconds is not none %}<span>eta</span><span data-eta="{{ detail.eta_seconds }}">~{{ panel.eta_label }} left</span>{% endif %}
-    <span>quote</span><span>{{ detail.quote }} cr</span>
-    {% if detail.status == 'queued' and detail.position is not none %}<span>position</span><span>#{{ detail.position }}</span>{% endif %}
+    {% if detail.eta_seconds is not none %}<span>time left</span><span data-eta="{{ detail.eta_seconds }}">~{{ panel.eta_label }}</span>{% endif %}
+    <span>price</span><span>{{ detail.quote }} credits</span>
+    {% if detail.status == 'queued' and detail.position is not none %}<span>place in line</span><span>#{{ detail.position }}</span>{% endif %}
   </div>
 </div>
 
@@ -24,9 +24,9 @@
 </div>
 {% endif %}
 {% if detail.status == 'awaiting_confirmation' %}
-<div class="notice warn">waiting for the owner to confirm this job.</div>
+<div class="notice warn">waiting for the person who ordered it to confirm and pay.</div>
 {% elif detail.status == 'cancelled' %}
-<div class="notice">cancelled, credits refunded.</div>
+<div class="notice">cancelled. the credits were refunded.</div>
 {% elif detail.status == 'failed' %}
 <div class="notice warn">failed: {{ detail.error }}, credits refunded.</div>
 {% endif %}
@@ -61,11 +61,11 @@
     </div>
     {% endif %}
     {% else %}
-    <div class="res" style="background:var(--bg)"><button class="play" type="button" disabled style="opacity:.4">▶</button><div class="meta"><span class="t muted">appears here when it is done</span></div></div>
+    <div class="res" style="background:var(--bg)"><button class="play" type="button" disabled style="opacity:.4">▶</button><div class="meta"><span class="t muted">your result shows up here when the job is done</span></div></div>
     {% endfor %}
-    <span class="label">events</span>
+    <span class="label">activity</span>
     <div class="log">
-      {% for line in logs %}<div><span class="t">{{ line.time }}</span> {{ line.text }}</div>{% else %}<p class="muted">no events yet.</p>{% endfor %}
+      {% for line in logs %}<div><span class="t">{{ line.time }}</span> {{ line.text }}</div>{% else %}<p class="muted">nothing yet.</p>{% endfor %}
     </div>
   </div>
 </div>

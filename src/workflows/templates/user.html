@@ -7,9 +7,9 @@
   <span class="label">job history</span>
   <div class="queue">
     {% for job in jobs %}
-    <div class="q"><span class="pos">#{{ job.id }}</span><span class="what"><b>{{ job.type }}</b><small>{{ job.status }}</small></span><a class="tag" href="/jobs/{{ job.id }}">view</a><span></span></div>
+    <div class="q"><span class="pos">#{{ job.id }}</span><span class="what"><b>{{ job.type }}</b><small>{{ job.status|status_label }}</small></span><a class="tag" href="/jobs/{{ job.id }}">open</a><span></span></div>
     {% else %}
-    <p class="muted">no jobs yet, <a href="/">order one</a>.</p>
+    <p class="muted">no jobs yet. <a href="/#create">create one</a>.</p>
     {% endfor %}
   </div>
 </div>

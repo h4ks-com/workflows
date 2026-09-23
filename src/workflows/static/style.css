@@ -23,7 +23,9 @@ a { color: var(--accent); }
 header.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; padding-block: 16px; border-bottom: 1px solid var(--border); }
 .brand { font: 600 18px var(--mono); letter-spacing: 0.02em; color: var(--text); text-decoration: none; display: flex; align-items: center; gap: 10px; }
 .brand .mark { background: var(--accent); color: var(--bg); padding: 2px 6px; font-weight: 600; }
-.brand .sub { color: var(--dim); font-weight: 400; }
+.foot { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); font: 13px var(--mono); }
+.foot a { color: var(--dim); text-decoration: none; }
+.foot a:hover { color: var(--text); }
 nav.tabs { display: flex; flex-wrap: wrap; gap: 4px; }
 nav.tabs a { font: 500 13px var(--mono); color: var(--mid); text-decoration: none; padding: 7px 12px; border: 1px solid transparent; text-transform: lowercase; }
 nav.tabs a:hover { border-color: var(--border); }

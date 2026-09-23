@@ -12,7 +12,7 @@
 <body>
 <div class="wrap">
   <header class="bar">
-    <a class="brand" href="/"><span class="mark">h4</span>workflows<span class="sub">.h4ks.com</span></a>
+    <a class="brand" href="/"><span class="mark">h4</span>workflows</a>
     <nav class="tabs" aria-label="screens">
       <a href="/" class="{{ 'on' if active == 'home' else '' }}">queue</a>
       <a href="/wallet" class="{{ 'on' if active == 'wallet' else '' }}">wallet</a>
@@ -20,7 +20,7 @@
     </nav>
     <span class="spacer"></span>
     {% if me %}
-    <a class="chip" href="/wallet"><b>{{ "{:,}".format(me.free_credits + me.paid_credits) }} cr</b>{% if me.free_credits %}<span class="free">+{{ me.free_credits }} free today</span>{% endif %}</a>
+    <a class="chip" href="/wallet"><b>{{ "{:,}".format(me.free_credits + me.paid_credits) }} credits</b>{% if me.free_credits %}<span class="free">+{{ me.free_credits }} free today</span>{% endif %}</a>
     <a class="who" href="/u/{{ me.username }}"><span class="avatar">{{ me.username[:2]|upper }}</span>{{ me.username }}</a>
     <a class="btn ghost" href="/logout">log out</a>
     {% else %}
@@ -28,6 +28,12 @@
     {% endif %}
   </header>
   {% block content %}{% endblock %}
+  <footer class="foot">
+    <a href="https://h4ks.com">h4ks</a>
+    <a href="https://chat.h4ks.com">chat</a>
+    <a href="https://beans.h4ks.com">beans</a>
+    <a href="https://github.com/h4ks-com/workflows">source</a>
+  </footer>
 </div>
 <script src="{{ url_for('static', path='htmx-2.0.4.min.js') }}"></script>
 <script src="{{ url_for('static', path='app.js') }}"></script>

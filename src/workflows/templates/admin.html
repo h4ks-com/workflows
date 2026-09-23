@@ -25,7 +25,7 @@
     <span class="label">cancel a job</span>
     <form method="post" action="/admin/cancel">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <div class="row"><input type="number" name="job_id" placeholder="job id" required><button class="btn" type="submit">cancel + refund</button></div>
+      <div class="row"><input type="number" name="job_id" placeholder="job id" required><button class="btn" type="submit">cancel and refund</button></div>
     </form>
     <span class="label">grant credits</span>
     <form method="post" action="/admin/credits">
@@ -33,18 +33,18 @@
       <div class="field"><input type="text" name="username" placeholder="username" required></div>
       <div class="field"><input type="number" name="credits" placeholder="credit delta, negative to deduct" required></div>
       <div class="field"><input type="text" name="note" placeholder="why" required></div>
-      <button class="btn" type="submit">apply</button>
+      <button class="btn" type="submit">grant</button>
     </form>
   </div>
 </div>
 <div class="panel">
-  <span class="label">running + queued</span>
+  <span class="label">running and in line</span>
   <div class="queue">
     {% if queue.running %}
     <div class="q"><span class="pos">run</span><span class="what"><b>{{ queue.running.owner or 'guest' }}</b> · {{ queue.running.type }}<small><a href="/jobs/{{ queue.running.id }}">job #{{ queue.running.id }}</a></small></span><span class="tag run">running</span><span></span></div>
     {% endif %}
     {% for slot in queue.queued %}
-    <div class="q"><span class="pos">#{{ slot.position }}</span><span class="what"><b>{{ slot.owner or 'guest' }}</b> · {{ slot.type }}<small><a href="/jobs/{{ slot.id }}">job #{{ slot.id }}</a></small></span><span class="tag wait">queued</span><span></span></div>
+    <div class="q"><span class="pos">#{{ slot.position }}</span><span class="what"><b>{{ slot.owner or 'guest' }}</b> · {{ slot.type }}<small><a href="/jobs/{{ slot.id }}">job #{{ slot.id }}</a></small></span><span class="tag wait">in line</span><span></span></div>
     {% else %}
     {% if not queue.running %}<p class="muted">queue is empty.</p>{% endif %}
     {% endfor %}

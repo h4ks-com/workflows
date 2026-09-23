@@ -17,9 +17,9 @@ def test_home_page_lists_queue_and_types_logged_out(client: TestClient) -> None:
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "queue is empty" in response.text
+    assert "nothing in line" in response.text
     assert "~/parody" in response.text
-    assert "coming soon" in response.text
+    assert "not available yet" in response.text
     assert "log in" in response.text
 
 
@@ -61,7 +61,7 @@ def test_order_page_shows_coming_soon_for_unavailable_type(client: TestClient) -
     response = client.get("/order/voice")
 
     assert response.status_code == 200
-    assert "coming soon" in response.text
+    assert "not available yet" in response.text
 
 
 def test_order_page_unknown_type_is_404(client: TestClient) -> None:
@@ -151,7 +151,7 @@ def test_job_page_shows_status(client: TestClient, session: Session, services: S
     response = client.get(f"/jobs/{job.id}")
 
     assert response.status_code == 200
-    assert "awaiting_confirmation" in response.text
+    assert "waiting for confirmation" in response.text
 
 
 def test_job_page_unknown_job_is_404(client: TestClient) -> None:

@@ -92,30 +92,32 @@ class JobParams(BaseModel, ABC):
 
 
 class ParodyParams(JobParams):
-    url: HttpUrl = Field(description="Song to parody: YouTube, SoundCloud or a direct audio URL.")
+    url: HttpUrl = Field(
+        description="Link to the song: YouTube, SoundCloud or a direct audio file."
+    )
     lyrics: str | None = Field(
         None,
         max_length=LYRICS_TEXT,
         json_schema_extra=MULTILINE,
-        description="Original lyrics. Fetched from lrclib when omitted.",
+        description="Original lyrics of the song. Leave empty to look them up automatically.",
     )
     parody_lyrics: str | None = Field(
         None,
         max_length=LYRICS_TEXT,
         json_schema_extra=MULTILINE,
-        description="Finished parody lyrics. Written from the idea when omitted.",
+        description="Your new lyrics, line by line. Leave empty to write them from the idea.",
     )
     idea: str | None = Field(
         None,
         max_length=LONG_TEXT,
         json_schema_extra=MULTILINE,
-        description="What the parody is about.",
+        description="What the new lyrics should be about.",
     )
     amount: Literal["a few words", "most lines", "every line"] = Field(
-        "most lines", description="How much of the original lyrics to change."
+        "most lines", description="How much of the lyrics to replace."
     )
-    title: str | None = Field(None, max_length=SHORT_TEXT, description="Title for the result.")
-    radio: bool = Field(False, description="Also play the result on h4ks radio.")
+    title: str | None = Field(None, max_length=SHORT_TEXT, description="Title of the result.")
+    radio: bool = Field(False, description="Also play it on h4ks radio.")
 
     def media_url(self) -> str:
         return str(self.url)
@@ -129,19 +131,22 @@ class SongParams(JobParams):
         min_length=1,
         max_length=LONG_TEXT,
         json_schema_extra=MULTILINE,
-        description="What the song is about.",
+        description="What the song should be about.",
     )
     lyrics: str | None = Field(
         None,
         max_length=LYRICS_TEXT,
         json_schema_extra=MULTILINE,
-        description="Lyrics to sing. Written from the prompt when omitted.",
+        description="Lyrics to sing. Leave empty to have them written for you.",
     )
     style: str | None = Field(
-        None, max_length=MEDIUM_TEXT, description="Musical style, genre or mood."
+        None, max_length=MEDIUM_TEXT, description="Genre, mood or style, for example lo-fi hip hop."
     )
-    seconds: int = Field(150, ge=60, le=240, description="Song length in seconds.")
-    model: Literal["ace-step", "minimax"] = Field("ace-step", description="Music model.")
+    seconds: int = Field(150, ge=60, le=240, description="Length in seconds.")
+    model: Literal["ace-step", "minimax"] = Field(
+        "ace-step",
+        description="Music model: ace-step is fast, minimax sounds better but costs more.",
+    )
 
     def quote(self, probe: Probe | None) -> int:
         per_second = 0.3 if self.model == "ace-step" else 1.8
@@ -149,9 +154,9 @@ class SongParams(JobParams):
 
 
 class VoiceParams(JobParams):
-    url: HttpUrl = Field(description="Song whose vocals get the new voice.")
+    url: HttpUrl = Field(description="Link to the song whose voice you want to replace.")
     voice_url: HttpUrl = Field(
-        description="Clip or song with the target voice. We use its loudest 30 seconds."
+        description="Link to a recording of the new voice. A song works too."
     )
 
     def media_url(self) -> str:
@@ -166,11 +171,13 @@ class PodcastParams(JobParams):
         min_length=1,
         max_length=LONG_TEXT,
         json_schema_extra=MULTILINE,
-        description="Topic of the episode.",
+        description="What the episode should be about.",
     )
-    minutes: int = Field(6, ge=2, le=15, description="Episode length in minutes.")
+    minutes: int = Field(6, ge=2, le=15, description="Length in minutes.")
     bed_style: str | None = Field(
-        None, max_length=MEDIUM_TEXT, description="Style of the background music bed."
+        None,
+        max_length=MEDIUM_TEXT,
+        description="Style of the background music, for example soft jazz.",
     )
 
     def quote(self, probe: Probe | None) -> int:
@@ -222,7 +229,7 @@ JOB_TYPES = (
     JobType(
         name="parody",
         title="Parody",
-        description="Rewrite the lyrics of a song and sing them in the original voice.",
+        description="Replace the lyrics of a song, sung in the original voice.",
         pricing="1.2 credits per second of the song, plus 120",
         params_model=ParodyParams,
         steps=_steps(
@@ -237,7 +244,7 @@ JOB_TYPES = (
     JobType(
         name="song",
         title="Song",
-        description="Write and generate a new song from a prompt.",
+        description="Create a new song from a description.",
         pricing="ace-step: 0.3 credits per second plus 60; minimax: 1.8 credits per second plus 60",
         params_model=SongParams,
         steps=_steps(("write", 20), ("generate", 70), ("store", 10)),
@@ -245,7 +252,7 @@ JOB_TYPES = (
     JobType(
         name="voice",
         title="Voice swap",
-        description="Sing a song in another voice.",
+        description="Replace the voice in a song with another voice.",
         pricing="2 credits per second of the song, plus 90",
         params_model=VoiceParams,
         steps=_steps(("fetch", 10), ("separate", 30), ("convert", 45), ("mix", 15)),
@@ -253,7 +260,7 @@ JOB_TYPES = (
     JobType(
         name="podcast",
         title="Podcast episode",
-        description="Research, write and voice a podcast episode about a topic.",
+        description="Create a two-host podcast episode about any topic.",
         pricing="90 credits per minute, plus 120",
         params_model=PodcastParams,
         steps=_steps(

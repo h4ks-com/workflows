@@ -31,22 +31,22 @@
       <div class="q {{ 'me' if me and slot.owner == me.username else '' }}">
         <span class="pos">#{{ slot.position }}</span>
         <span class="what"><b>{{ slot.owner or 'guest' }}</b> · {{ slot.type }}<small><a href="/jobs/{{ slot.id }}">job #{{ slot.id }}</a></small></span>
-        <span class="tag {{ 'wait' if me and slot.owner == me.username else '' }}">{{ 'you' if me and slot.owner == me.username else 'queued' }}</span>
+        <span class="tag {{ 'wait' if me and slot.owner == me.username else '' }}">{{ 'you' if me and slot.owner == me.username else 'in line' }}</span>
         <span class="num muted eta">~{{ (slot.starts_in_seconds // 60) if slot.starts_in_seconds is not none else '?' }} min</span>
       </div>
       {% else %}
-      <p class="muted">queue is empty, <a href="/">order something</a> to fill it.</p>
+      <p class="muted">nothing in line. <a href="#create">create something</a>.</p>
       {% endfor %}
     </div>
   </div>
   <div class="panel">
-    <span class="label">make something</span>
+    <span class="label" id="create">create</span>
     <div class="cards" style="grid-template-columns: 1fr 1fr;">
       {% for t in types %}
       {% if t.available %}
       <a class="type" href="/order/{{ t.name }}"><span class="glyph">~/{{ t.name }}</span><p>{{ t.description }}</p><span class="price">{{ t.pricing }}</span></a>
       {% else %}
-      <div class="type soon"><span class="glyph">~/{{ t.name }}</span><p>{{ t.description }}</p><span class="price">coming soon</span></div>
+      <div class="type soon"><span class="glyph">~/{{ t.name }}</span><p>{{ t.description }}</p><span class="price">not available yet</span></div>
       {% endif %}
       {% endfor %}
     </div>

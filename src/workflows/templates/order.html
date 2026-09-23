@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}order ~/{{ job_type.name }} · h4ks workflows{% endblock %}
+{% block title %}create ~/{{ job_type.name }} · h4ks workflows{% endblock %}
 {% block content %}
 <section class="page">
 <div class="row"><h1>~/{{ job_type.name }}</h1><span class="tag">{{ job_type.title }}</span></div>
 <p class="muted">{{ job_type.description }}</p>
 {% if not job_type.available %}
-<div class="notice warn">this job type is coming soon, not orderable yet.</div>
+<div class="notice warn">this job type is not available yet.</div>
 {% else %}
 {% if error %}<div class="notice warn">{{ error }}</div>{% endif %}
-{% if not me %}<div class="notice">log in to order this. <a href="/login?next=/order/{{ job_type.name }}">log in</a></div>{% endif %}
+{% if not me %}<div class="notice">log in to submit this job. <a href="/login?next=/order/{{ job_type.name }}">log in</a></div>{% endif %}
 <form method="post" action="/order/{{ job_type.name }}" class="form-grid" id="order-form"
   hx-post="/order/{{ job_type.name }}/quote" hx-trigger="input changed delay:400ms, change, click from:.seg button delay:100ms"
   hx-target="#quote-panel" hx-swap="innerHTML">

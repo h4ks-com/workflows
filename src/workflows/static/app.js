@@ -17,7 +17,7 @@
       if (Number.isNaN(left) || el.dataset.etaDone) return;
       left = Math.max(0, left - 1);
       el.dataset.eta = String(left);
-      el.textContent = left > 0 ? `~${fmtEta(left)} left` : "finishing up";
+      el.textContent = left > 0 ? `~${fmtEta(left)}` : "almost done";
     });
   }
   setInterval(countdowns, 1000);

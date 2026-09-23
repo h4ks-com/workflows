@@ -14,7 +14,7 @@ from starlette.datastructures import FormData
 from starlette.responses import Response
 
 from workflows.auth import CurrentUser, is_admin, verify_csrf
-from workflows.db import Job, JobStatus, LedgerEntry, LinkRequest, User
+from workflows.db import Job, JobStatus, LedgerEntry, LedgerKind, LinkRequest, User
 from workflows.jobtypes import JobType, Step
 from workflows.ledger import grant_daily
 from workflows.settings import Settings
@@ -145,7 +145,36 @@ def is_playable_url(url: str) -> bool:
     return url.startswith(("http://", "https://"))
 
 
+STATUS_LABELS = {
+    JobStatus.AWAITING_CONFIRMATION: "waiting for confirmation",
+    JobStatus.QUEUED: "in line",
+    JobStatus.RUNNING: "running",
+    JobStatus.SUCCEEDED: "done",
+    JobStatus.FAILED: "failed",
+    JobStatus.CANCELLED: "cancelled",
+}
+
+LEDGER_LABELS = {
+    LedgerKind.FREE_GRANT: "daily free credits",
+    LedgerKind.TOPUP: "top-up",
+    LedgerKind.RESERVE: "held for a job",
+    LedgerKind.CAPTURE: "paid for a job",
+    LedgerKind.REFUND: "refund",
+    LedgerKind.ADMIN_ADJUST: "adjusted by an admin",
+}
+
+
+def status_label(status: str) -> str:
+    return STATUS_LABELS.get(JobStatus(status), status)
+
+
+def ledger_label(kind: str) -> str:
+    return LEDGER_LABELS.get(LedgerKind(kind), kind)
+
+
 templates.env.tests["playable"] = is_playable_url
+templates.env.filters["status_label"] = status_label
+templates.env.filters["ledger_label"] = ledger_label
 
 
 @dataclass(frozen=True)
