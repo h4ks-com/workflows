@@ -1,7 +1,7 @@
 [project]
 name = "workflows"
 version = "0.0.0"
-description = "Paid AI media job queue for the h4ks community"
+description = "Storefront and queue for h4ks workflows"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [

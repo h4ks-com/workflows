@@ -3,10 +3,10 @@
 Instructions for AI agents working in this repo. Read before editing.
 
 ## What this is
-h4ks workflows: a paid job service for the h4ks community. Users order AI media jobs (parody, song, voice swap, podcast episode), pay a fixed quote in credits, and wait in one global queue where exactly one job runs at a time. Executors (n8n webhooks) do the work and report progress back through callbacks.
+h4ks workflows is a storefront and queue for workflows that run elsewhere. It sells job types for credits (bought with beans, plus a daily free allowance), keeps one global queue where exactly one job runs at a time, dispatches each job to its executor, and shows progress from the executor's callbacks. It knows nothing about how a job is done: an executor is any HTTP endpoint that accepts the dispatch and reports `step`, `log`, `result` or `error` events back. Job types (their params, price formula and steps) are declared in the registry.
 
 ## Where things live
-- App factory (routers, middleware, error handlers, worker lifespan): `src/workflows/app.py`
+- App factory (routers, middleware, error handlers, lifespan tasks): `src/workflows/app.py`
 - Settings, one module that reads every environment variable: `src/workflows/settings.py` (all listed in `.env.example`)
 - Database models and engine (SQLAlchemy, `create_all` on startup): `src/workflows/db.py`
 - Credits ledger (daily free grant, reserve, capture, refund, top-up, admin adjust): `src/workflows/ledger.py`
@@ -15,9 +15,12 @@ h4ks workflows: a paid job service for the h4ks community. Users order AI media 
 - Queue worker (dispatch, timeout watchdog, pause): `src/workflows/worker.py`
 - ETAs from rolling averages: `src/workflows/eta.py`
 - In-process event bus per job and for the queue: `src/workflows/bus.py`
-- Auth dependencies (session user, admin, service token): `src/workflows/auth.py`
+- Auth dependencies (session user, admin, service token, CSRF): `src/workflows/auth.py`
 - Shared app services and the DB session dependency: `src/workflows/state.py`
-- JSON API under `/api`: `src/workflows/api.py`
+- JSON API under `/api`: `src/workflows/api.py`, SSE streams: `src/workflows/stream.py`, read-only MCP at `/mcp`: `src/workflows/mcp.py`
+- Login (Logto OIDC, dev login): `src/workflows/login.py`; account, wallet and top-ups: `src/workflows/account.py`; Beans top-up poller: `src/workflows/beans.py`
+- IRC bot endpoints, confirm and link pages: `src/workflows/irc.py`; channel notifications: `src/workflows/notify.py`; admin API: `src/workflows/admin.py`
+- Web pages: `src/workflows/web.py` with `webforms.py`, `webviews.py`, `templates/` and `static/`
 - The `Makefile` is the single canonical interface for all checks; CI and pre-commit both call it.
 
 ## Stack

@@ -1,6 +1,6 @@
 # h4ks workflows
 
-Paid AI media job queue for the h4ks community.
+Storefront and queue for h4ks workflows: users pay credits to run a job, and external executors do the work.
 
 ```sh
 make install

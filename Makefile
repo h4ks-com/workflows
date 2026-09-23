@@ -1,5 +1,3 @@
-PYTHON := uv run
-
 .PHONY: install fix precommit format format-check lint lint-fix imports imports-check typecheck dead-code unused-deps security audit test coverage build quality ci docker-build docker-run run clean e2e-up e2e e2e-down
 
 install:
@@ -11,43 +9,43 @@ precommit: fix
 fix: format imports lint-fix
 
 format:
-	$(PYTHON) ruff format .
+	uv run ruff format .
 
 format-check:
-	$(PYTHON) ruff format --check .
+	uv run ruff format --check .
 
 lint:
-	$(PYTHON) ruff check .
+	uv run ruff check .
 
 lint-fix:
-	$(PYTHON) ruff check --fix .
+	uv run ruff check --fix .
 
 imports:
-	$(PYTHON) ruff check --select I --fix .
+	uv run ruff check --select I --fix .
 
 imports-check:
-	$(PYTHON) ruff check --select I .
+	uv run ruff check --select I .
 
 typecheck:
-	$(PYTHON) mypy
+	uv run mypy
 
 dead-code:
-	$(PYTHON) vulture src/workflows tests
+	uv run vulture src/workflows tests
 
 unused-deps:
-	$(PYTHON) deptry .
+	uv run deptry .
 
 security:
-	$(PYTHON) bandit -c pyproject.toml -r src/workflows
+	uv run bandit -c pyproject.toml -r src/workflows
 
 audit:
 	uv run --with pip pip-audit
 
 test:
-	$(PYTHON) pytest
+	uv run pytest
 
 coverage:
-	$(PYTHON) pytest --cov --cov-report=term-missing
+	uv run pytest --cov --cov-report=term-missing
 
 build:
 	uv build
@@ -73,7 +71,7 @@ e2e-up:
 	docker compose up -d --build --wait
 
 e2e:
-	$(PYTHON) pytest e2e -m e2e
+	uv run pytest e2e -m e2e
 
 e2e-down:
 	docker compose down -v
