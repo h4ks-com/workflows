@@ -1,0 +1,36 @@
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+from typing import Annotated, cast
+
+from fastapi import Depends, Request
+from sqlalchemy.orm import Session, sessionmaker
+
+from workflows.bus import EventBus
+from workflows.jobtypes import JobType, Prober
+from workflows.settings import Settings
+from workflows.worker import QueueWorker
+
+
+@dataclass(frozen=True)
+class Services:
+    settings: Settings
+    sessions: sessionmaker[Session]
+    registry: dict[str, JobType]
+    bus: EventBus
+    prober: Prober
+    worker: QueueWorker
+
+
+def get_services(request: Request) -> Services:
+    return cast(Services, request.app.state.services)
+
+
+AppServices = Annotated[Services, Depends(get_services)]
+
+
+async def get_db(services: AppServices) -> AsyncIterator[Session]:
+    with services.sessions() as session:
+        yield session
+
+
+Db = Annotated[Session, Depends(get_db)]
