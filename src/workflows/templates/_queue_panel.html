@@ -1,9 +1,9 @@
 {% if running %}
 <div class="panel">
-  <span class="label">now playing on the GPU</span>
+  <span class="label">running now</span>
   <div class="now">
     <div class="ring" aria-label="{{ running.eta_label }} left">
-      <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="#1d2238" stroke-width="8"/><circle cx="50" cy="50" r="44" fill="none" stroke="#5c9eff" stroke-width="8" stroke-dasharray="276.5" stroke-dashoffset="{{ running.ring_offset }}"/></svg>
+      <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="{{ ring_radius }}" fill="none" stroke="#1d2238" stroke-width="8"/><circle cx="50" cy="50" r="{{ ring_radius }}" fill="none" stroke="#5c9eff" stroke-width="8" stroke-dasharray="{{ ring_circumference }}" stroke-dashoffset="{{ running.ring_offset }}"/></svg>
       <div class="center"><div><b>{{ running.eta_label }}</b><span>left</span></div></div>
     </div>
     <div class="info">
@@ -58,11 +58,12 @@
   <div class="feed">
     {% for job in recent %}
     <div class="res">
-      {% set playable = job.result and job.result.files %}
-      <button class="play" type="button" aria-label="play"
-        {% if not playable %}disabled style="opacity:.4"{% endif %}
-        {% for file in (job.result.files if job.result else []) %}{% if loop.first and file.mime.startswith('audio') and file.url is playable %}data-src="{{ file.url }}"{% endif %}{% endfor %}
-      >▶</button>
+      {% set file = job.result.files[0] if job.result and job.result.files else none %}
+      {% if file and file.url is playable and file.mime.startswith('audio') %}
+      <button class="play" type="button" aria-label="play" data-src="{{ file.url }}">▶</button>
+      {% elif file and file.url is playable %}
+      <a href="{{ file.url }}" class="muted">download</a>
+      {% endif %}
       <div class="meta"><span class="t"><b>{{ job.result.title if job.result and job.result.title else 'job #' ~ job.id }}</b> <span class="muted">· {{ job.type }}{% if job.owner %} · {{ job.owner }}{% endif %}</span></span><canvas class="wave" data-seed="{{ job.id }}"></canvas></div>
     </div>
     {% else %}

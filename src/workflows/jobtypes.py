@@ -6,6 +6,7 @@ from typing import Literal, Protocol
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError
+from pydantic.config import JsonDict
 
 PROBE_TIMEOUT_SECONDS = 60.0
 PROBE_CONCURRENCY = 4
@@ -16,6 +17,8 @@ SHORT_TEXT = 200
 MEDIUM_TEXT = 500
 LONG_TEXT = 2000
 LYRICS_TEXT = 6000
+TEXTAREA = "textarea"
+MULTILINE: JsonDict = {"format": TEXTAREA}
 
 
 class ProbeError(Exception):
@@ -93,14 +96,21 @@ class ParodyParams(JobParams):
     lyrics: str | None = Field(
         None,
         max_length=LYRICS_TEXT,
+        json_schema_extra=MULTILINE,
         description="Original lyrics. Fetched from lrclib when omitted.",
     )
     parody_lyrics: str | None = Field(
         None,
         max_length=LYRICS_TEXT,
+        json_schema_extra=MULTILINE,
         description="Finished parody lyrics. Written from the idea when omitted.",
     )
-    idea: str | None = Field(None, max_length=LONG_TEXT, description="What the parody is about.")
+    idea: str | None = Field(
+        None,
+        max_length=LONG_TEXT,
+        json_schema_extra=MULTILINE,
+        description="What the parody is about.",
+    )
     amount: Literal["a few words", "most lines", "every line"] = Field(
         "most lines", description="How much of the original lyrics to change."
     )
@@ -115,10 +125,16 @@ class ParodyParams(JobParams):
 
 
 class SongParams(JobParams):
-    prompt: str = Field(min_length=1, max_length=LONG_TEXT, description="What the song is about.")
+    prompt: str = Field(
+        min_length=1,
+        max_length=LONG_TEXT,
+        json_schema_extra=MULTILINE,
+        description="What the song is about.",
+    )
     lyrics: str | None = Field(
         None,
         max_length=LYRICS_TEXT,
+        json_schema_extra=MULTILINE,
         description="Lyrics to sing. Written from the prompt when omitted.",
     )
     style: str | None = Field(
@@ -146,7 +162,12 @@ class VoiceParams(JobParams):
 
 
 class PodcastParams(JobParams):
-    prompt: str = Field(min_length=1, max_length=LONG_TEXT, description="Topic of the episode.")
+    prompt: str = Field(
+        min_length=1,
+        max_length=LONG_TEXT,
+        json_schema_extra=MULTILINE,
+        description="Topic of the episode.",
+    )
     minutes: int = Field(6, ge=2, le=15, description="Episode length in minutes.")
     bed_style: str | None = Field(
         None, max_length=MEDIUM_TEXT, description="Style of the background music bed."

@@ -56,8 +56,6 @@
     <div class="res">
       {% if file.mime.startswith('audio') %}
       <button class="play" type="button" aria-label="play" data-src="{{ file.url }}">▶</button>
-      {% else %}
-      <a class="play" href="{{ file.url }}" aria-label="download" style="text-decoration:none;display:grid;place-items:center">↓</a>
       {% endif %}
       <div class="meta"><span class="t">{{ file.name }}</span><a href="{{ file.url }}" class="muted" style="font-size:12px">download</a></div>
     </div>

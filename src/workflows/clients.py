@@ -1,38 +1,36 @@
 import secrets
 from datetime import timedelta
-from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
-from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.responses import Response
 
-from workflows.api import JobView, get_job_type, job_view
-from workflows.auth import csrf_token, current_user, require_service, verify_csrf
-from workflows.db import ExternalIdentity, Job, JobStatus, JsonObject, LinkRequest, User, utcnow
-from workflows.jobs import (
-    announce,
-    create_job,
-    enqueue,
-    ensure_available,
-    hash_token,
-    job_type_for,
-)
-from workflows.jobtypes import JobType, quote
+from workflows.api import QuoteRequest, price_request
+from workflows.auth import csrf_token, require_service
+from workflows.db import ExternalIdentity, Job, JobStatus, LinkRequest, User, utcnow
+from workflows.jobs import announce, create_job, enqueue, hash_token, job_type_for
+from workflows.jobtypes import JobType
 from workflows.ledger import InsufficientCreditsError, grant_daily
 from workflows.state import AppServices, Db, Services
-from workflows.webviews import is_playable_url, me_chip
+from workflows.views import JobView, job_view
+from workflows.webviews import (
+    TOPUP_HINT,
+    Page,
+    PageCtx,
+    TemplateValue,
+    login_redirect,
+    render,
+    verified_form,
+)
 
 LINK_EXPIRY = timedelta(hours=1)
 IDENTITY_PATTERN = r"^\S{1,200}$"
 router = APIRouter(prefix="/api/clients", dependencies=[Depends(require_service)])
 pages_router = APIRouter()
-templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
-templates.env.tests["playable"] = is_playable_url
 
 IdentityStr = Annotated[
     str,
@@ -43,12 +41,10 @@ IdentityStr = Annotated[
 ]
 
 
-class ClientJobRequest(BaseModel):
+class ClientJobRequest(QuoteRequest):
     identity: IdentityStr | None = Field(
         None, description="Identity acting for this job, or null for an anonymous order."
     )
-    type: str = Field(description="Job type name.")
-    params: JsonObject = Field(default_factory=dict, description="Job parameters.")
 
 
 class ClientJobView(BaseModel):
@@ -113,14 +109,7 @@ def _submit_awaiting_confirmation(
 
 @router.post("/jobs", status_code=status.HTTP_201_CREATED)
 async def submit_job(body: ClientJobRequest, session: Db, services: AppServices) -> ClientJobView:
-    job_type = get_job_type(services, body.type)
-    ensure_available(job_type)
-    try:
-        params = job_type.params_model.model_validate(body.params)
-    except ValidationError as error:
-        detail = error.errors(include_url=False, include_context=False)
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail) from error
-    priced = await quote(params, services.prober)
+    job_type, params, priced = await price_request(services, body)
     job = create_job(session, job_type, params, priced, None)
     job.identity = body.identity
     linked_user = _linked_user(session, body.identity) if body.identity else None
@@ -174,84 +163,62 @@ def _link_request_by_token(session: Session, token: str) -> LinkRequest:
 
 
 @pages_router.get("/confirm/{token}")
-async def confirm_page(
-    token: str, request: Request, session: Db, services: AppServices
+async def confirm_page(token: str, page: PageCtx) -> Response:
+    if page.user is None:
+        return login_redirect(f"/confirm/{token}")
+    return _render_confirm(page, _job_by_confirm_token(page.session, token))
+
+
+def _render_confirm(
+    page: Page, job: Job, error: str | None = None, status_code: int = 200
 ) -> Response:
-    user = await current_user(request, session)
-    if user is None:
-        return RedirectResponse(f"/login?next=/confirm/{token}")
-    job = _job_by_confirm_token(session, token)
-    job_type = job_type_for(services.registry, job.type)
-    return templates.TemplateResponse(
-        request,
-        "confirm.html",
-        {
-            "job": job,
-            "job_type": job_type,
-            "csrf_token": csrf_token(request),
-            "me": me_chip(session, services.settings, user),
-        },
-    )
+    context: dict[str, TemplateValue] = {
+        "job": job,
+        "job_type": job_type_for(page.services.registry, job.type),
+        "csrf_token": csrf_token(page.request),
+        "error": error,
+    }
+    return render(page, "confirm.html", context, status_code)
 
 
 @pages_router.post("/confirm/{token}")
-async def confirm_submit(
-    token: str,
-    request: Request,
-    session: Db,
-    services: AppServices,
-    csrf_token_field: Annotated[str, Form(alias="csrf_token")],
-    link_account: Annotated[bool, Form()] = False,
-) -> Response:
-    user = await current_user(request, session)
-    if user is None:
-        return RedirectResponse(
-            f"/login?next=/confirm/{token}", status_code=status.HTTP_303_SEE_OTHER
-        )
-    verify_csrf(request, csrf_token_field)
-    job = _job_by_confirm_token(session, token)
-    if link_account and job.identity:
-        _link_identity(session, job.identity, user)
+async def confirm_submit(token: str, page: PageCtx) -> Response:
+    if page.user is None:
+        return login_redirect(f"/confirm/{token}")
+    form = await verified_form(page.request)
+    job = _job_by_confirm_token(page.session, token)
+    if form.get("link_account") == "true" and job.identity:
+        _link_identity(page.session, job.identity, page.user)
     try:
-        enqueue(session, job, user)
-    except InsufficientCreditsError as error:
-        raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, str(error)) from error
+        enqueue(page.session, job, page.user)
+    except InsufficientCreditsError:
+        page.session.rollback()
+        return _render_confirm(page, job, TOPUP_HINT, status.HTTP_402_PAYMENT_REQUIRED)
     job.confirm_token_hash = None
-    session.commit()
-    announce(services.bus, job)
+    page.session.commit()
+    announce(page.services.bus, job)
     return RedirectResponse(f"/jobs/{job.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @pages_router.get("/link/{token}")
-async def link_page(token: str, request: Request, session: Db, services: AppServices) -> Response:
-    user = await current_user(request, session)
-    if user is None:
-        return RedirectResponse(f"/login?next=/link/{token}")
-    link_request = _link_request_by_token(session, token)
-    return templates.TemplateResponse(
-        request,
-        "link.html",
-        {
-            "link_request": link_request,
-            "csrf_token": csrf_token(request),
-            "me": me_chip(session, services.settings, user),
-        },
-    )
+async def link_page(token: str, page: PageCtx) -> Response:
+    if page.user is None:
+        return login_redirect(f"/link/{token}")
+    link_request = _link_request_by_token(page.session, token)
+    context: dict[str, TemplateValue] = {
+        "link_request": link_request,
+        "csrf_token": csrf_token(page.request),
+    }
+    return render(page, "link.html", context)
 
 
 @pages_router.post("/link/{token}")
-async def link_submit(
-    token: str,
-    request: Request,
-    session: Db,
-    csrf_token_field: Annotated[str, Form(alias="csrf_token")],
-) -> Response:
-    user = await current_user(request, session)
-    if user is None:
-        return RedirectResponse(f"/login?next=/link/{token}", status_code=status.HTTP_303_SEE_OTHER)
-    verify_csrf(request, csrf_token_field)
-    link_request = _link_request_by_token(session, token)
-    _link_identity(session, link_request.identity, user)
+async def link_submit(token: str, page: PageCtx) -> Response:
+    if page.user is None:
+        return login_redirect(f"/link/{token}")
+    await verified_form(page.request)
+    link_request = _link_request_by_token(page.session, token)
+    _link_identity(page.session, link_request.identity, page.user)
     link_request.used = True
-    session.commit()
+    page.session.commit()
     return RedirectResponse("/wallet", status_code=status.HTTP_303_SEE_OTHER)

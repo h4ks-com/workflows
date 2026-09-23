@@ -1,99 +1,66 @@
-from dataclasses import dataclass
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import RedirectResponse
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.datastructures import FormData
 from starlette.responses import Response
 
-from workflows.account import ledger_entries, linked_identities, topup_url, unlink_identity
-from workflows.api import (
-    QuoteRequest,
-    get_job_or_404,
-    get_job_type,
-    job_detail_view,
-    job_views,
-    price_request,
-    queue_view,
-    quote_view,
-    type_view,
+from workflows.account import (
+    MAX_TOPUP_BEANS,
+    TopupRequest,
+    ledger_entries,
+    linked_identities,
+    topup_url,
+    unlink_identity,
 )
-from workflows.auth import CurrentUser, csrf_token, is_admin, verify_csrf
-from workflows.clients import templates
+from workflows.admin import AdjustCreditsRequest, adjust_credits, cancel_job, health, set_paused
+from workflows.api import QuoteRequest, get_job_type, price_request
+from workflows.auth import csrf_token, require_admin
 from workflows.db import Job, JobStatus, JsonObject, User
-from workflows.jobs import announce, cancel, create_job, ensure_available, job_type_for
-from workflows.jobs import enqueue as enqueue_job
-from workflows.jobtypes import JobType
-from workflows.ledger import InsufficientCreditsError, adjust
+from workflows.jobs import JobError, announce, create_job, enqueue, ensure_available, job_type_for
+from workflows.jobtypes import JobType, ProbeError
+from workflows.ledger import InsufficientCreditsError
 from workflows.settings import CREDITS_PER_BEAN, FREE_DAILY_CREDITS
-from workflows.state import AppServices, Db, Services
-from workflows.webforms import FieldSpec, field_specs
-from workflows.webviews import log_lines, me_chip, running_panel
+from workflows.state import Services
+from workflows.views import job_detail_view, job_views, queue_view, quote_view, type_view
+from workflows.webforms import field_specs
+from workflows.webviews import (
+    TOPUP_HINT,
+    Page,
+    PageCtx,
+    TemplateValue,
+    form_str,
+    log_lines,
+    login_redirect,
+    render,
+    running_panel,
+    verified_form,
+)
+
+type Context = dict[str, TemplateValue]
 
 RESERVED_STATUSES = (JobStatus.QUEUED, JobStatus.RUNNING)
 RECENT_RESULTS = 4
 USER_JOB_LIMIT = 50
+PROBE_FAILED = "could not read that URL"
+FORM_INVALID = "check the form for mistakes"
 
 router = APIRouter()
-
-
-@dataclass(frozen=True)
-class Page:
-    request: Request
-    session: Session
-    services: Services
-    user: User | None
-
-
-async def get_page(request: Request, session: Db, services: AppServices, user: CurrentUser) -> Page:
-    return Page(request, session, services, user)
-
-
-PageCtx = Annotated[Page, Depends(get_page)]
-
-
-def render(
-    page: Page, template: str, context: dict[str, object], status_code: int = 200
-) -> Response:
-    full: dict[str, object] = dict(context)
-    full["me"] = me_chip(page.session, page.services.settings, page.user) if page.user else None
-    return templates.TemplateResponse(page.request, template, full, status_code=status_code)
-
-
-def login_redirect(next_path: str) -> RedirectResponse:
-    return RedirectResponse(f"/login?next={next_path}", status_code=303)
-
-
-def form_int(form: FormData, name: str) -> int:
-    raw = form.get(name)
-    return int(raw) if isinstance(raw, str) and raw else 0
-
-
-def form_str(form: FormData, name: str) -> str:
-    raw = form.get(name)
-    return raw if isinstance(raw, str) else ""
 
 
 def params_from_form(form: FormData, job_type: JobType) -> JsonObject:
     params: JsonObject = {}
     for spec in field_specs(job_type.params_model.model_json_schema()):
-        _apply_field(params, form, spec)
+        raw = form.get(spec.name)
+        if spec.kind == "checkbox":
+            params[spec.name] = spec.name in form
+        elif isinstance(raw, str) and raw != "":
+            params[spec.name] = raw
     return params
 
 
-def _apply_field(params: JsonObject, form: FormData, spec: FieldSpec) -> None:
-    if spec.kind == "checkbox":
-        params[spec.name] = spec.name in form
-        return
-    raw = form.get(spec.name)
-    if not isinstance(raw, str) or raw == "":
-        return
-    params[spec.name] = int(raw) if spec.kind == "number" else raw
-
-
-def _queue_context(session: Session, services: Services) -> dict[str, object]:
+def _queue_context(session: Session, services: Services) -> Context:
     queue = queue_view(session, services)
     running = (
         running_panel(queue.running, job_type_for(services.registry, queue.running.type), [])
@@ -118,37 +85,44 @@ async def partial_queue(page: PageCtx) -> Response:
     return render(page, "_queue_panel.html", _queue_context(page.session, page.services))
 
 
-@router.get("/order/{type_name}")
-async def order_page(type_name: str, page: PageCtx) -> Response:
-    job_type = get_job_type(page.services, type_name)
-    context = {
+def _order_context(page: Page, job_type: JobType, error: str | None = None) -> Context:
+    return {
         "job_type": type_view(job_type),
         "fields": field_specs(job_type.params_model.model_json_schema()),
         "quote": None,
-        "error": None,
+        "error": error,
         "csrf_token": csrf_token(page.request),
     }
-    return render(page, "order.html", context)
+
+
+@router.get("/order/{type_name}")
+async def order_page(type_name: str, page: PageCtx) -> Response:
+    job_type = get_job_type(page.services, type_name)
+    return render(page, "order.html", _order_context(page, job_type))
+
+
+async def _price_form(page: Page, job_type: JobType, form: FormData) -> Context:
+    request = QuoteRequest(type=job_type.name, params=params_from_form(form, job_type))
+    try:
+        _, _, priced = await price_request(page.services, request)
+    except ProbeError:
+        return {"error": PROBE_FAILED}
+    return {"quote": quote_view(priced)}
 
 
 @router.post("/order/{type_name}/quote")
 async def order_quote(type_name: str, page: PageCtx) -> Response:
     job_type = get_job_type(page.services, type_name)
-    form = await page.request.form()
-    context: dict[str, object] = {"job_type": type_view(job_type), "quote": None, "error": None}
+    context: Context = {"job_type": type_view(job_type), "quote": None, "error": None}
     if not job_type.available:
         return render(page, "_quote_panel.html", context)
-    params_dict = params_from_form(form, job_type)
+    form = await page.request.form()
     try:
-        _, _, priced = await price_request(
-            page.services, QuoteRequest(type=type_name, params=params_dict)
-        )
+        context.update(await _price_form(page, job_type, form))
     except HTTPException as error:
         if error.status_code != status.HTTP_422_UNPROCESSABLE_CONTENT:
             raise
         context["error"] = "fill in the required fields to see your price"
-        return render(page, "_quote_panel.html", context)
-    context["quote"] = quote_view(priced)
     return render(page, "_quote_panel.html", context)
 
 
@@ -158,66 +132,52 @@ async def order_submit(type_name: str, page: PageCtx) -> Response:
         return login_redirect(f"/order/{type_name}")
     job_type = get_job_type(page.services, type_name)
     ensure_available(job_type)
-    form = await page.request.form()
-    csrf = form.get("csrf_token")
-    verify_csrf(page.request, csrf if isinstance(csrf, str) else "")
-    return await _create_and_redirect(page, page.user, job_type, type_name, form)
+    form = await verified_form(page.request)
+    return await _create_and_redirect(page, page.user, job_type, form)
 
 
 async def _create_and_redirect(
-    page: Page, user: User, job_type: JobType, type_name: str, form: FormData
+    page: Page, user: User, job_type: JobType, form: FormData
 ) -> Response:
-    params_dict = params_from_form(form, job_type)
-    context = {
-        "job_type": type_view(job_type),
-        "fields": field_specs(job_type.params_model.model_json_schema()),
-        "quote": None,
-        "csrf_token": csrf_token(page.request),
-    }
+    request = QuoteRequest(type=job_type.name, params=params_from_form(form, job_type))
     try:
-        _, params, priced = await price_request(
-            page.services, QuoteRequest(type=type_name, params=params_dict)
-        )
+        _, params, priced = await price_request(page.services, request)
     except HTTPException as error:
         if error.status_code != status.HTTP_422_UNPROCESSABLE_CONTENT:
             raise
-        return render(page, "order.html", {**context, "error": "check the form for mistakes"}, 422)
+        return render(page, "order.html", _order_context(page, job_type, FORM_INVALID), 422)
+    except ProbeError:
+        return render(page, "order.html", _order_context(page, job_type, PROBE_FAILED), 502)
     job = create_job(page.session, job_type, params, priced, user)
     try:
-        enqueue_job(page.session, job, user)
+        enqueue(page.session, job, user)
     except InsufficientCreditsError:
         page.session.rollback()
-        hint = "not enough credits, top up in your wallet first"
-        return render(page, "order.html", {**context, "error": hint}, 402)
+        return render(page, "order.html", _order_context(page, job_type, TOPUP_HINT), 402)
     page.session.commit()
     announce(page.services.bus, job)
     return RedirectResponse(f"/jobs/{job.id}", status_code=303)
 
 
-@router.get("/jobs/{job_id}")
-async def job_page(job_id: int, page: PageCtx) -> Response:
+def _job_context(page: Page, job_id: int) -> Context:
     detail = job_detail_view(page.session, page.services, job_id)
     job_type = job_type_for(page.services.registry, detail.type)
-    context = {
+    return {
         "detail": detail,
         "job_type": type_view(job_type),
         "panel": running_panel(detail, job_type, detail.events),
         "logs": log_lines(detail.events),
     }
-    return render(page, "job.html", context)
+
+
+@router.get("/jobs/{job_id}")
+async def job_page(job_id: int, page: PageCtx) -> Response:
+    return render(page, "job.html", _job_context(page, job_id))
 
 
 @router.get("/partials/jobs/{job_id}")
 async def partial_job(job_id: int, page: PageCtx) -> Response:
-    detail = job_detail_view(page.session, page.services, job_id)
-    job_type = job_type_for(page.services.registry, detail.type)
-    context = {
-        "detail": detail,
-        "job_type": type_view(job_type),
-        "panel": running_panel(detail, job_type, detail.events),
-        "logs": log_lines(detail.events),
-    }
-    return render(page, "_job_panel.html", context)
+    return render(page, "_job_panel.html", _job_context(page, job_id))
 
 
 def _reserved_credits(session: Session, user: User) -> int:
@@ -227,31 +187,40 @@ def _reserved_credits(session: Session, user: User) -> int:
     return sum(free + paid for free, paid in session.execute(query))
 
 
-@router.get("/wallet")
-async def wallet_page(page: PageCtx) -> Response:
-    if page.user is None:
-        return login_redirect("/wallet")
-    context = {
-        "identities": linked_identities(page.session, page.user),
-        "ledger": ledger_entries(page.session, page.user),
-        "reserved": _reserved_credits(page.session, page.user),
+def _render_wallet(
+    page: Page, user: User, error: str | None = None, status_code: int = 200
+) -> Response:
+    context: Context = {
+        "identities": linked_identities(page.session, user),
+        "ledger": ledger_entries(page.session, user),
+        "reserved": _reserved_credits(page.session, user),
         "credits_per_bean": CREDITS_PER_BEAN,
         "free_daily": FREE_DAILY_CREDITS,
         "csrf_token": csrf_token(page.request),
         "active": "wallet",
+        "error": error,
     }
-    return render(page, "wallet.html", context)
+    return render(page, "wallet.html", context, status_code)
+
+
+@router.get("/wallet")
+async def wallet_page(page: PageCtx) -> Response:
+    if page.user is None:
+        return login_redirect("/wallet")
+    return _render_wallet(page, page.user)
 
 
 @router.post("/wallet/topup")
 async def wallet_topup(page: PageCtx) -> Response:
     if page.user is None:
         return login_redirect("/wallet")
-    form = await page.request.form()
-    csrf = form.get("csrf_token")
-    verify_csrf(page.request, csrf if isinstance(csrf, str) else "")
-    beans = form_int(form, "beans")
-    url = topup_url(page.services.settings.beans_url, page.user.username, beans)
+    form = await verified_form(page.request)
+    try:
+        body = TopupRequest.model_validate({"beans": form_str(form, "beans")})
+    except ValidationError:
+        error = f"choose between 1 and {MAX_TOPUP_BEANS} beans"
+        return _render_wallet(page, page.user, error, 422)
+    url = topup_url(page.services.settings.beans_url, page.user.username, body.beans)
     return RedirectResponse(url, status_code=303)
 
 
@@ -259,46 +228,32 @@ async def wallet_topup(page: PageCtx) -> Response:
 async def wallet_unlink(page: PageCtx) -> Response:
     if page.user is None:
         return login_redirect("/wallet")
-    form = await page.request.form()
-    csrf = form.get("csrf_token")
-    verify_csrf(page.request, csrf if isinstance(csrf, str) else "")
+    form = await verified_form(page.request)
     unlink_identity(page.session, page.user, form_str(form, "identity"))
     return RedirectResponse("/wallet", status_code=303)
 
 
-def _require_admin_page(page: Page) -> RedirectResponse | None:
+async def _admin_redirect(page: Page) -> RedirectResponse | None:
     if page.user is None:
         return login_redirect("/admin")
-    require_admin_check(page.user, page.services)
+    await require_admin(page.user, page.services)
     return None
 
 
-def require_admin_check(user: User, services: Services) -> None:
-    if not is_admin(user, services.settings):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "admins only")
-
-
-def _health(services: Services) -> dict[str, object]:
-    return {
-        "executors": {name: job_type.available for name, job_type in services.registry.items()},
-        "beans_poller_last_success": services.beans_poller.last_success
-        if services.beans_poller
-        else None,
+def _render_admin(page: Page, error: str | None = None, status_code: int = 200) -> Response:
+    context: Context = {
+        "queue": queue_view(page.session, page.services),
+        "health": health(page.services),
+        "csrf_token": csrf_token(page.request),
+        "active": "admin",
+        "error": error,
     }
+    return render(page, "admin.html", context, status_code)
 
 
 @router.get("/admin")
 async def admin_page(page: PageCtx) -> Response:
-    redirect = _require_admin_page(page)
-    if redirect:
-        return redirect
-    context = {
-        "queue": queue_view(page.session, page.services),
-        "health": _health(page.services),
-        "csrf_token": csrf_token(page.request),
-        "active": "admin",
-    }
-    return render(page, "admin.html", context)
+    return await _admin_redirect(page) or _render_admin(page)
 
 
 @router.post("/admin/pause")
@@ -312,44 +267,49 @@ async def admin_resume(page: PageCtx) -> Response:
 
 
 async def _toggle_pause(page: Page, paused: bool) -> Response:
-    redirect = _require_admin_page(page)
+    redirect = await _admin_redirect(page)
     if redirect:
         return redirect
-    form = await page.request.form()
-    csrf = form.get("csrf_token")
-    verify_csrf(page.request, csrf if isinstance(csrf, str) else "")
-    page.services.worker.paused = paused
+    await verified_form(page.request)
+    set_paused(page.services, paused)
     return RedirectResponse("/admin", status_code=303)
 
 
 @router.post("/admin/cancel")
 async def admin_cancel(page: PageCtx) -> Response:
-    redirect = _require_admin_page(page)
+    redirect = await _admin_redirect(page)
     if redirect:
         return redirect
-    form = await page.request.form()
-    csrf = form.get("csrf_token")
-    verify_csrf(page.request, csrf if isinstance(csrf, str) else "")
-    job = get_job_or_404(page.session, form_int(form, "job_id"))
-    cancel(page.session, job)
-    page.session.commit()
-    announce(page.services.bus, job)
+    form = await verified_form(page.request)
+    job_id = form_str(form, "job_id")
+    if not job_id.isdigit():
+        return _render_admin(page, "enter a job id", 422)
+    try:
+        cancel_job(page.session, page.services, int(job_id))
+    except HTTPException as error:
+        return _render_admin(page, str(error.detail), error.status_code)
+    except JobError as error:
+        return _render_admin(page, str(error), status.HTTP_409_CONFLICT)
     return RedirectResponse("/admin", status_code=303)
 
 
 @router.post("/admin/credits")
 async def admin_credits(page: PageCtx) -> Response:
-    redirect = _require_admin_page(page)
+    redirect = await _admin_redirect(page)
     if redirect:
         return redirect
-    form = await page.request.form()
-    csrf = form.get("csrf_token")
-    verify_csrf(page.request, csrf if isinstance(csrf, str) else "")
-    username = form_str(form, "username")
-    target = page.session.scalar(select(User).where(User.username == username))
-    if target is not None:
-        adjust(page.session, target, form_int(form, "credits"), form_str(form, "note"))
-        page.session.commit()
+    form = await verified_form(page.request)
+    try:
+        body = AdjustCreditsRequest.model_validate(
+            {"credits": form_str(form, "credits"), "note": form_str(form, "note")}
+        )
+        adjust_credits(page.session, form_str(form, "username"), body)
+    except ValidationError:
+        return _render_admin(page, "enter a whole number of credits and a note", 422)
+    except HTTPException as error:
+        return _render_admin(page, str(error.detail), error.status_code)
+    except InsufficientCreditsError as error:
+        return _render_admin(page, str(error), status.HTTP_402_PAYMENT_REQUIRED)
     return RedirectResponse("/admin", status_code=303)
 
 
@@ -358,7 +318,7 @@ async def user_page(username: str, page: PageCtx) -> Response:
     target = page.session.scalar(select(User).where(User.username == username))
     if target is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"no user named {username}")
-    context: dict[str, object] = {
+    context: Context = {
         "username": username,
         "jobs": job_views(page.session, page.services, username, USER_JOB_LIMIT),
     }

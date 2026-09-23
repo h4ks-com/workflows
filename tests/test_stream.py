@@ -6,12 +6,12 @@ from fastapi import FastAPI
 from sqlalchemy.orm import Session
 
 from conftest import make_user, queue_job
-from workflows.api import QueueView, queue_view
 from workflows.bus import QUEUE_TOPIC, BusEvent, job_topic
 from workflows.db import JobStatus
 from workflows.jobs import start
 from workflows.state import Services
 from workflows.stream import _job_events, _queue_events
+from workflows.views import QueueView, queue_view
 
 
 def _kinds(body: str) -> list[str]:

@@ -3,8 +3,7 @@ from dataclasses import dataclass
 from pydantic import JsonValue
 
 from workflows.db import JsonObject
-
-LONG_TEXT_FIELDS = frozenset({"lyrics", "parody_lyrics", "idea", "prompt"})
+from workflows.jobtypes import TEXTAREA
 
 
 @dataclass(frozen=True)
@@ -51,14 +50,14 @@ def _enum(prop: JsonObject) -> tuple[str, ...] | None:
     return None
 
 
-def _kind(name: str, prop_type: str | None, enum: tuple[str, ...] | None) -> str:
+def _kind(prop: JsonObject, prop_type: str | None, enum: tuple[str, ...] | None) -> str:
     if enum is not None:
         return "select"
     if prop_type == "boolean":
         return "checkbox"
     if prop_type in ("integer", "number"):
         return "number"
-    if name in LONG_TEXT_FIELDS:
+    if prop.get("format") == TEXTAREA:
         return "textarea"
     return "text"
 
@@ -82,7 +81,7 @@ def field_specs(schema: JsonObject) -> list[FieldSpec]:
                 name=name,
                 label=str(prop.get("title", name)),
                 description=str(prop.get("description", "")),
-                kind=_kind(name, prop_type, enum),
+                kind=_kind(prop, prop_type, enum),
                 required=name in required_names,
                 enum=enum,
                 minimum=_bound(prop, "minimum"),

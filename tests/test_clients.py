@@ -279,3 +279,23 @@ def test_link_refuses_an_identity_linked_elsewhere(client: TestClient, session: 
     csrf = client.get(f"/link/{token}").text.split('name="csrf_token" value="')[1].split('"')[0]
 
     assert client.post(f"/link/{token}", data={"csrf_token": csrf}).status_code == 409
+
+
+def test_confirm_without_enough_credits_renders_the_topup_hint(
+    client: TestClient, session: Session, prober: FakeProber
+) -> None:
+    long_url = "https://youtube.example/watch?v=long"
+    prober.durations[long_url] = 400.0
+    submit = client.post(
+        "/api/clients/jobs",
+        json={"type": "parody", "params": {"url": long_url}},
+        headers=SERVICE_HEADERS,
+    )
+    token = submit.json()["confirm_url"].rsplit("/", 1)[-1]
+    log_in(client, make_user(session, "alice"))
+    csrf = client.get(f"/confirm/{token}").text.split('name="csrf_token" value="')[1].split('"')[0]
+
+    response = client.post(f"/confirm/{token}", data={"csrf_token": csrf})
+
+    assert response.status_code == 402
+    assert "top up in your wallet" in response.text

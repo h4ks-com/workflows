@@ -1,17 +1,34 @@
+import math
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
+from typing import Annotated
 
+from fastapi import Depends, Request
+from fastapi.responses import RedirectResponse
+from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from starlette.datastructures import FormData
+from starlette.responses import Response
 
-from workflows.api import JobEventView, JobView
-from workflows.auth import is_admin
-from workflows.db import User
+from workflows.auth import CurrentUser, is_admin, verify_csrf
+from workflows.db import Job, JobStatus, LedgerEntry, LinkRequest, User
 from workflows.jobtypes import JobType, Step
 from workflows.ledger import grant_daily
 from workflows.settings import Settings
+from workflows.state import AppServices, Db, Services
+from workflows.views import JobEventView, JobView
+from workflows.webforms import FieldSpec
 
-RING_RADIUS = 44.0
-RING_CIRCUMFERENCE = round(2 * 3.14159265 * RING_RADIUS, 1)
+RING_RADIUS = 44
+RING_CIRCUMFERENCE = round(2 * math.pi * RING_RADIUS, 1)
+TOPUP_HINT = "not enough credits, top up in your wallet first"
+
+templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+templates.env.globals["ring_radius"] = RING_RADIUS
+templates.env.globals["ring_circumference"] = RING_CIRCUMFERENCE
 
 
 @dataclass(frozen=True)
@@ -22,9 +39,7 @@ class MeChip:
     admin: bool
 
 
-def me_chip(session: Session, settings: Settings, user: User) -> MeChip:
-    grant_daily(session, user)
-    session.commit()
+def me_chip(settings: Settings, user: User) -> MeChip:
     return MeChip(user.username, user.free_credits, user.paid_credits, is_admin(user, settings))
 
 
@@ -77,7 +92,7 @@ def _now_row(step: Step, job: JobView, when: str) -> StepRow:
 
 def step_rows(job: JobView, job_type: JobType, events: list[JobEventView]) -> list[StepRow]:
     last_seen = _step_events(events)
-    if job.status == "succeeded":
+    if job.status == JobStatus.SUCCEEDED:
         return [
             _done_row(step, _elapsed_label(job.started_at, last_seen.get(step.name)))
             for step in job_type.steps
@@ -120,8 +135,6 @@ def _log_text(event: JobEventView) -> str:
             return "result received"
         case "error":
             return f"error: {event.data.get('message', '')}"
-        case _:
-            return event.kind
 
 
 def log_lines(events: list[JobEventView]) -> list[LogLine]:
@@ -130,6 +143,9 @@ def log_lines(events: list[JobEventView]) -> list[LogLine]:
 
 def is_playable_url(url: str) -> bool:
     return url.startswith(("http://", "https://"))
+
+
+templates.env.tests["playable"] = is_playable_url
 
 
 @dataclass(frozen=True)
@@ -149,3 +165,59 @@ def running_panel(job: JobView, job_type: JobType, events: list[JobEventView]) -
         ring_offset=ring_offset(job.progress.fraction),
         eta_label=format_seconds(job.eta_seconds),
     )
+
+
+type TemplateValue = (
+    str
+    | int
+    | BaseModel
+    | JobType
+    | RunningPanel
+    | MeChip
+    | Job
+    | LinkRequest
+    | Sequence[BaseModel | FieldSpec | LogLine | LedgerEntry | str]
+    | None
+)
+
+
+@dataclass(frozen=True)
+class Page:
+    request: Request
+    session: Session
+    services: Services
+    user: User | None
+
+
+async def get_page(request: Request, session: Db, services: AppServices, user: CurrentUser) -> Page:
+    if user is not None:
+        grant_daily(session, user)
+        session.commit()
+    return Page(request, session, services, user)
+
+
+PageCtx = Annotated[Page, Depends(get_page)]
+
+
+def render(
+    page: Page, template: str, context: Mapping[str, TemplateValue], status_code: int = 200
+) -> Response:
+    me = me_chip(page.services.settings, page.user) if page.user else None
+    full: dict[str, TemplateValue] = {**context, "me": me}
+    return templates.TemplateResponse(page.request, template, full, status_code=status_code)
+
+
+def login_redirect(next_path: str) -> RedirectResponse:
+    return RedirectResponse(f"/login?next={next_path}", status_code=303)
+
+
+async def verified_form(request: Request) -> FormData:
+    form = await request.form()
+    csrf = form.get("csrf_token")
+    verify_csrf(request, csrf if isinstance(csrf, str) else "")
+    return form
+
+
+def form_str(form: FormData, name: str) -> str:
+    raw = form.get(name)
+    return raw if isinstance(raw, str) else ""

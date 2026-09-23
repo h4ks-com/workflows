@@ -3,6 +3,7 @@
 {% block content %}
 <section class="page">
 <h1>admin</h1>
+{% if error %}<div class="notice warn">{{ error }}</div>{% endif %}
 <div class="grid-2">
   <div class="panel">
     <span class="label">queue</span>
@@ -15,6 +16,8 @@
     </div>
     <span class="label">executors</span>
     <div class="kv">{% for name, ok in health.executors.items() %}<span>{{ name }}</span><span class="{{ 'ok' if ok else 'muted' }}">{{ 'ready' if ok else 'not configured' }}</span>{% endfor %}</div>
+    <span class="label">worker</span>
+    <p class="{{ 'ok' if health.worker_alive else 'muted' }}">{{ 'running' if health.worker_alive else 'stopped' }}</p>
     <span class="label">beans poller</span>
     <p class="muted num">{{ health.beans_poller_last_success or 'never' }}</p>
   </div>

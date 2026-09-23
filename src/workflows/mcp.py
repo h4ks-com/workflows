@@ -1,26 +1,21 @@
 from fastmcp import FastMCP
 from pydantic import BaseModel, Field
 
-from workflows.api import (
-    DEFAULT_JOB_LIMIT,
-    MAX_JOB_LIMIT,
+from workflows.api import DEFAULT_JOB_LIMIT, MAX_JOB_LIMIT, QuoteRequest, price_request
+from workflows.db import JsonObject
+from workflows.state import Services
+from workflows.views import (
     JobDetailView,
     JobTypeView,
     JobView,
     QueueView,
-    QuoteRequest,
     QuoteView,
     job_detail_view,
     job_views,
-    price_request,
     queue_view,
     quote_view,
     type_view,
 )
-from workflows.db import JsonObject
-from workflows.state import Services
-
-MCP_PATH = "/"
 
 
 class HowToOrderEntry(BaseModel):

@@ -1,9 +1,10 @@
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from conftest import FakeProber, log_in, make_job, make_user, queue_job
-from workflows.db import ExternalIdentity
+from workflows.db import ExternalIdentity, JsonObject
 from workflows.jobs import LogEvent, StepEvent, apply_event, start, succeed
 from workflows.state import Services
 
@@ -34,7 +35,9 @@ def test_home_page_shows_running_and_queued_jobs(
 
     response = client.get("/")
 
-    assert "now playing" in response.text
+    assert "running now" in response.text
+    assert "GPU" not in response.text
+    assert 'stroke-dasharray="276.5"' in response.text
     assert "alice" in response.text
     assert "bob" in response.text
 
@@ -334,3 +337,117 @@ def test_wallet_unlinks_an_identity(client: TestClient, session: Session) -> Non
 
     assert response.headers["location"] == "/wallet"
     assert session.scalar(select(ExternalIdentity)) is None
+
+
+def test_order_submit_with_non_numeric_input_rerenders_form(
+    client: TestClient, session: Session
+) -> None:
+    log_in(client, make_user(session, "alice"))
+    page = client.get("/order/song")
+
+    response = client.post(
+        "/order/song",
+        data={"csrf_token": csrf_from(page.text), "prompt": "cats", "seconds": "abc"},
+    )
+    quote = client.post("/order/song/quote", data={"prompt": "cats", "seconds": "abc"})
+
+    assert response.status_code == 422
+    assert "check the form" in response.text
+    assert "fill in the required fields" in quote.text
+
+
+def test_order_shows_probe_failures(client: TestClient, session: Session) -> None:
+    unknown_url = "https://youtube.example/watch?v=missing"
+    log_in(client, make_user(session, "alice"))
+    page = client.get("/order/parody")
+
+    quote = client.post("/order/parody/quote", data={"url": unknown_url})
+    response = client.post(
+        "/order/parody", data={"csrf_token": csrf_from(page.text), "url": unknown_url}
+    )
+
+    assert "could not read that URL" in quote.text
+    assert response.status_code == 502
+    assert "could not read that URL" in response.text
+
+
+def test_order_page_uses_textareas_for_long_text(client: TestClient) -> None:
+    text = client.get("/order/song").text
+
+    assert '<textarea id="f-prompt"' in text
+    assert '<input id="f-style" type="text"' in text
+
+
+@pytest.mark.parametrize("beans", ["0", "1001", "abc"])
+def test_wallet_topup_rejects_out_of_range_beans(
+    client: TestClient, session: Session, beans: str
+) -> None:
+    log_in(client, make_user(session, "alice"))
+    page = client.get("/wallet")
+
+    response = client.post(
+        "/wallet/topup", data={"csrf_token": csrf_from(page.text), "beans": beans}
+    )
+
+    assert response.status_code == 422
+    assert "choose between 1 and 1000 beans" in response.text
+
+
+@pytest.mark.parametrize(
+    ("form", "status", "message"),
+    [
+        ({"username": "nobody", "credits": "5", "note": "x"}, 404, "no user named nobody"),
+        ({"username": "alice", "credits": "lots", "note": "x"}, 422, "whole number of credits"),
+        ({"username": "alice", "credits": "-5", "note": "x"}, 402, "needs 5 credits"),
+    ],
+)
+def test_admin_grant_errors_render_the_page(
+    client: TestClient, session: Session, form: dict[str, str], status: int, message: str
+) -> None:
+    log_in(client, make_user(session, "root"))
+    make_user(session, "alice")
+    page = client.get("/admin")
+
+    response = client.post("/admin/credits", data={"csrf_token": csrf_from(page.text), **form})
+
+    assert response.status_code == status
+    assert message in response.text
+
+
+def test_admin_cancel_errors_render_the_page(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    log_in(client, make_user(session, "root"))
+    job = queue_job(session, services, make_user(session, "alice"))
+    job.status = "succeeded"
+    session.commit()
+    csrf = csrf_from(client.get("/admin").text)
+
+    bad = client.post("/admin/cancel", data={"csrf_token": csrf, "job_id": "abc"})
+    missing = client.post("/admin/cancel", data={"csrf_token": csrf, "job_id": "999"})
+    finished = client.post("/admin/cancel", data={"csrf_token": csrf, "job_id": str(job.id)})
+
+    assert (bad.status_code, missing.status_code, finished.status_code) == (422, 404, 409)
+    assert "job is already succeeded" in finished.text
+
+
+def test_results_play_audio_and_link_other_files(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    job = queue_job(session, services, make_user(session, "alice"))
+    start(job)
+    video: JsonObject = {
+        "url": "https://bucket.example/clip.mp4",
+        "name": "clip.mp4",
+        "mime": "video/mp4",
+    }
+    succeed(session, job, {"files": [video]})
+    session.commit()
+
+    panel = client.get(f"/partials/jobs/{job.id}").text
+    home = client.get("/").text
+
+    assert 'class="play"' not in panel
+    assert 'href="https://bucket.example/clip.mp4"' in panel
+    assert 'data-src="https://bucket.example/clip.mp4"' not in home
+    assert 'href="https://bucket.example/clip.mp4"' in home

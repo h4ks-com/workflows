@@ -399,3 +399,18 @@ async def test_admin_and_service_dependencies(session: Session, services: Servic
         await require_admin(alice, services)
     with pytest.raises(HTTPException):
         await require_service(Request({"type": "http", "headers": []}), services)
+
+
+def test_every_api_model_field_is_described(app: FastAPI) -> None:
+    schemas = app.openapi()["components"]["schemas"]
+    undescribed = [
+        f"{name}.{field}"
+        for name, schema in schemas.items()
+        if name not in {"HTTPValidationError", "ValidationError"}
+        for field, spec in schema.get("properties", {}).items()
+        if "description" not in spec
+    ]
+
+    assert undescribed == []
+    assert schemas["JobView"]["properties"]["status"]["$ref"].endswith("/JobStatus")
+    assert schemas["JobEventView"]["properties"]["kind"]["$ref"].endswith("/EventKind")

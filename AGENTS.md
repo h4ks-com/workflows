@@ -17,10 +17,10 @@ h4ks workflows is a storefront and queue for workflows that run elsewhere. It se
 - In-process event bus per job and for the queue: `src/workflows/bus.py`
 - Auth dependencies (session user, admin, service token, CSRF): `src/workflows/auth.py`
 - Shared app services and the DB session dependency: `src/workflows/state.py`
-- JSON API under `/api`: `src/workflows/api.py`, SSE streams: `src/workflows/stream.py`, read-only MCP at `/mcp`: `src/workflows/mcp.py`
+- JSON API under `/api`: `src/workflows/api.py` with its response models in `src/workflows/views.py`, SSE streams: `src/workflows/stream.py`, read-only MCP at `/mcp`: `src/workflows/mcp.py`
 - Login (Logto OIDC, dev login): `src/workflows/login.py`; account, wallet and top-ups: `src/workflows/account.py`; Beans top-up poller: `src/workflows/beans.py`
 - Client-facing job submission and identity linking, confirm and link pages: `src/workflows/clients.py`; admin API: `src/workflows/admin.py`
-- Web pages: `src/workflows/web.py` with `webforms.py`, `webviews.py`, `templates/` and `static/`
+- Web pages: `src/workflows/web.py` with `webforms.py`, `webviews.py` (templates, page context, rendering, CSRF form helper), `templates/` and `static/`
 - The `Makefile` is the single canonical interface for all checks; CI and pre-commit both call it.
 
 ## Stack

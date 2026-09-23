@@ -4,11 +4,11 @@ from collections.abc import AsyncIterator
 from fastapi import APIRouter
 from sse_starlette import EventSourceResponse, ServerSentEvent
 
-from workflows.api import get_job_or_404, job_detail_view, queue_view
 from workflows.bus import QUEUE_TOPIC, BusEvent, job_topic
 from workflows.db import JsonObject
 from workflows.jobs import STATUS_EVENT, TERMINAL_STATUSES
 from workflows.state import AppServices, Services
+from workflows.views import get_job_or_404, job_detail_view, queue_view
 
 router = APIRouter(prefix="/api")
 

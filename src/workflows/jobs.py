@@ -28,15 +28,18 @@ class InvalidEventError(Exception):
     pass
 
 
+type EventKind = Literal["step", "log", "result", "error"]
+
+
 class StepEvent(BaseModel):
-    kind: Literal["step"]
+    kind: Literal["step"] = Field(description="Reports the step the executor is on.")
     step: str = Field(description="Name of the step the executor is working on.")
     done: int | None = Field(None, ge=0, description="Units finished within the step.")
     total: int | None = Field(None, ge=1, description="Units in the step.")
 
 
 class LogEvent(BaseModel):
-    kind: Literal["log"]
+    kind: Literal["log"] = Field(description="Adds a line to the run log.")
     message: str = Field(description="Log line to show on the run page.")
 
 
@@ -47,14 +50,14 @@ class ResultFile(BaseModel):
 
 
 class ResultEvent(BaseModel):
-    kind: Literal["result"]
+    kind: Literal["result"] = Field(description="Finishes the job successfully.")
     files: list[ResultFile] = Field(description="Files the job produced.")
     title: str | None = Field(None, description="Title of the result.")
     metadata_url: str | None = Field(None, description="URL of the metadata JSON beside the files.")
 
 
 class ErrorEvent(BaseModel):
-    kind: Literal["error"]
+    kind: Literal["error"] = Field(description="Fails the job and refunds it.")
     message: str = Field(description="Why the job failed.")
 
 

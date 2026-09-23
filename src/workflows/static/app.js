@@ -1,6 +1,8 @@
 (() => {
   "use strict";
 
+  const TERMINAL = ["succeeded", "failed", "cancelled"];
+
   function fmtEta(seconds) {
     if (seconds == null) return "";
     seconds = Math.max(0, Math.round(seconds));
@@ -75,20 +77,6 @@
   document.addEventListener("DOMContentLoaded", drawWaves);
   document.body.addEventListener("htmx:afterSettle", drawWaves);
 
-  function stepClass(name, current, doneSteps) {
-    if (doneSteps.includes(name)) return "done";
-    if (name === current) return "now";
-    return "";
-  }
-  window.workflowsStepClass = stepClass;
-
-  function ringDash(fraction) {
-    const r = 44;
-    const circumference = 2 * Math.PI * r;
-    return { circumference, offset: circumference * (1 - fraction) };
-  }
-  window.workflowsRingDash = ringDash;
-
   function connectQueueStream() {
     const root = document.getElementById("queue-live");
     if (!root || typeof EventSource === "undefined") return;
@@ -104,9 +92,12 @@
     const jobId = root.dataset.jobId;
     const source = new EventSource(`/api/jobs/${jobId}/stream`);
     const refresh = () => htmx.ajax("GET", `/partials/jobs/${jobId}`, { target: "#job-live", swap: "innerHTML" });
-    ["snapshot", "step", "log", "result", "error", "status"].forEach((kind) => {
-      source.addEventListener(kind, refresh);
-    });
+    const refreshAndCloseWhenDone = (event) => {
+      refresh();
+      if (TERMINAL.includes(JSON.parse(event.data).status)) source.close();
+    };
+    ["step", "log", "result", "error"].forEach((kind) => source.addEventListener(kind, refresh));
+    ["snapshot", "status"].forEach((kind) => source.addEventListener(kind, refreshAndCloseWhenDone));
   }
 
   document.addEventListener("DOMContentLoaded", () => {
