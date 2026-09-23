@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}admin · h4ks workflows{% endblock %}
+{% block content %}
+<section class="page">
+<h1>admin</h1>
+<div class="grid-2">
+  <div class="panel">
+    <span class="label">queue</span>
+    <div class="row">
+      <span class="tag {{ 'bad' if queue.paused else 'ok' }}">{{ 'paused' if queue.paused else 'running' }}</span>
+      <form method="post" action="/admin/{{ 'resume' if queue.paused else 'pause' }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn ghost" type="submit">{{ 'resume queue' if queue.paused else 'pause queue' }}</button>
+      </form>
+    </div>
+    <span class="label">executors</span>
+    <div class="kv">{% for name, ok in health.executors.items() %}<span>{{ name }}</span><span class="{{ 'ok' if ok else 'muted' }}">{{ 'ready' if ok else 'not configured' }}</span>{% endfor %}</div>
+    <span class="label">beans poller</span>
+    <p class="muted num">{{ health.beans_poller_last_success or 'never' }}</p>
+  </div>
+  <div class="panel">
+    <span class="label">cancel a job</span>
+    <form method="post" action="/admin/cancel">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="row"><input type="number" name="job_id" placeholder="job id" required><button class="btn" type="submit">cancel + refund</button></div>
+    </form>
+    <span class="label">grant credits</span>
+    <form method="post" action="/admin/credits">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field"><input type="text" name="username" placeholder="username" required></div>
+      <div class="field"><input type="number" name="credits" placeholder="credit delta, negative to deduct" required></div>
+      <div class="field"><input type="text" name="note" placeholder="why" required></div>
+      <button class="btn" type="submit">apply</button>
+    </form>
+  </div>
+</div>
+<div class="panel">
+  <span class="label">running + queued</span>
+  <div class="queue">
+    {% if queue.running %}
+    <div class="q"><span class="pos">run</span><span class="what"><b>{{ queue.running.owner or 'irc' }}</b> · {{ queue.running.type }}<small><a href="/jobs/{{ queue.running.id }}">job #{{ queue.running.id }}</a></small></span><span class="tag run">running</span><span></span></div>
+    {% endif %}
+    {% for slot in queue.queued %}
+    <div class="q"><span class="pos">#{{ slot.position }}</span><span class="what"><b>{{ slot.owner or 'irc' }}</b> · {{ slot.type }}<small><a href="/jobs/{{ slot.id }}">job #{{ slot.id }}</a></small></span><span class="tag wait">queued</span><span></span></div>
+    {% else %}
+    {% if not queue.running %}<p class="muted">queue is empty.</p>{% endif %}
+    {% endfor %}
+  </div>
+</div>
+</section>
+{% endblock %}

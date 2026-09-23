@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}order ~/{{ job_type.name }} · h4ks workflows{% endblock %}
+{% block content %}
+<section class="page">
+<div class="row"><h1>~/{{ job_type.name }}</h1><span class="tag">{{ job_type.title }}</span></div>
+<p class="muted">{{ job_type.description }}</p>
+{% if not job_type.available %}
+<div class="notice warn">this job type is coming soon, not orderable yet.</div>
+{% else %}
+{% if error %}<div class="notice warn">{{ error }}</div>{% endif %}
+{% if not me %}<div class="notice">log in to order this. <a href="/login?next=/order/{{ job_type.name }}">log in</a></div>{% endif %}
+<form method="post" action="/order/{{ job_type.name }}" class="form-grid" id="order-form"
+  hx-post="/order/{{ job_type.name }}/quote" hx-trigger="input changed delay:400ms, change, click from:.seg button delay:100ms"
+  hx-target="#quote-panel" hx-swap="innerHTML">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="panel">
+  {% for f in fields %}
+  <div class="field">
+    <label for="f-{{ f.name }}">{{ f.label }}{% if not f.required %} <small>(optional)</small>{% endif %}</label>
+    {% if f.kind == "textarea" %}
+    <textarea id="f-{{ f.name }}" name="{{ f.name }}">{{ f.default or "" }}</textarea>
+    {% elif f.kind == "select" %}
+    <div class="seg" role="tablist">
+      {% for opt in f.enum %}<button type="button" class="{{ 'on' if opt == f.default else '' }}" data-value="{{ opt }}">{{ opt }}</button>{% endfor %}
+    </div>
+    <input type="hidden" name="{{ f.name }}" value="{{ f.default or f.enum[0] }}">
+    {% elif f.kind == "checkbox" %}
+    <label class="row" style="font:13px var(--mono);color:var(--mid)"><input type="checkbox" name="{{ f.name }}" style="width:auto" {% if f.default %}checked{% endif %}> {{ f.description }}</label>
+    {% elif f.kind == "number" %}
+    <input id="f-{{ f.name }}" type="number" name="{{ f.name }}" value="{{ f.default }}" {% if f.minimum is not none %}min="{{ f.minimum|int }}"{% endif %} {% if f.maximum is not none %}max="{{ f.maximum|int }}"{% endif %}>
+    {% else %}
+    <input id="f-{{ f.name }}" type="text" name="{{ f.name }}" value="{{ f.default or '' }}">
+    {% endif %}
+    {% if f.kind != "checkbox" and f.description %}<small>{{ f.description }}</small>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+<aside class="panel quote" id="quote-panel" aria-label="price">
+  {% include "_quote_panel.html" %}
+</aside>
+</form>
+{% endif %}
+</section>
+{% endblock %}

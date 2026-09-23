@@ -18,11 +18,13 @@ from workflows.jobs import announce, create_job, enqueue, ensure_available, hash
 from workflows.jobtypes import JobType, quote
 from workflows.ledger import InsufficientCreditsError
 from workflows.state import AppServices, Db, Services
+from workflows.webviews import is_playable_url, me_chip
 
 LINK_EXPIRY = timedelta(hours=1)
 router = APIRouter(dependencies=[Depends(require_service)])
 pages_router = APIRouter()
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
+templates.env.tests["playable"] = is_playable_url
 
 
 class IrcSubmitRequest(BaseModel):
@@ -165,7 +167,12 @@ async def confirm_page(
     return templates.TemplateResponse(
         request,
         "confirm.html",
-        {"job": job, "job_type": job_type, "csrf_token": csrf_token(request)},
+        {
+            "job": job,
+            "job_type": job_type,
+            "csrf_token": csrf_token(request),
+            "me": me_chip(session, services.settings, user),
+        },
     )
 
 
@@ -198,7 +205,7 @@ async def confirm_submit(
 
 
 @pages_router.get("/link/{token}")
-async def link_page(token: str, request: Request, session: Db) -> Response:
+async def link_page(token: str, request: Request, session: Db, services: AppServices) -> Response:
     user = await current_user(request, session)
     if user is None:
         return RedirectResponse(f"/login?next=/link/{token}")
@@ -206,7 +213,11 @@ async def link_page(token: str, request: Request, session: Db) -> Response:
     return templates.TemplateResponse(
         request,
         "link.html",
-        {"link_request": link_request, "csrf_token": csrf_token(request)},
+        {
+            "link_request": link_request,
+            "csrf_token": csrf_token(request),
+            "me": me_chip(session, services.settings, user),
+        },
     )
 
 

@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}job #{{ detail.id }} · h4ks workflows{% endblock %}
+{% block content %}
+<section class="page" id="job-live" data-job-id="{{ detail.id }}">
+{% include "_job_panel.html" %}
+</section>
+{% endblock %}

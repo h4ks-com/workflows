@@ -1,0 +1,73 @@
+<div class="run-head">
+  <div style="display:grid;gap:8px">
+    <div class="row">
+      <span class="tag {{ 'run' if detail.status == 'running' else ('ok' if detail.status == 'succeeded' else ('bad' if detail.status in ('failed', 'cancelled') else 'wait')) }}">{{ detail.status }}</span>
+      <span class="tag">{{ detail.type }}</span>
+      <span class="muted num">#{{ detail.id }}{% if detail.owner %} · {{ detail.owner }}{% endif %}</span>
+    </div>
+    <h1>{{ detail.result.title if detail.result and detail.result.title else job_type.title ~ ' job #' ~ detail.id }}</h1>
+  </div>
+  <div class="kv" style="min-width:220px">
+    {% if detail.eta_seconds is not none %}<span>eta</span><span data-eta="{{ detail.eta_seconds }}">~{{ panel.eta_label }} left</span>{% endif %}
+    <span>quote</span><span>{{ detail.quote }} cr</span>
+    {% if detail.status == 'queued' and detail.position is not none %}<span>position</span><span>#{{ detail.position }}</span>{% endif %}
+  </div>
+</div>
+
+{% if detail.status in ('queued', 'running') %}
+<div class="panel">
+  <div class="steps" aria-label="steps">
+    {% for s in panel.steps %}
+    <div class="step {{ s.state }}" style="--w:{{ s.weight }};--p:{{ s.pct }}%"><div class="track"><span class="fill"></span></div><span class="name">{{ s.label }}</span></div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% if detail.status == 'awaiting_confirmation' %}
+<div class="notice warn">waiting for the owner to confirm this job.</div>
+{% elif detail.status == 'cancelled' %}
+<div class="notice">cancelled, credits refunded.</div>
+{% elif detail.status == 'failed' %}
+<div class="notice warn">failed: {{ detail.error }}, credits refunded.</div>
+{% endif %}
+
+<div class="grid-2">
+  <div class="panel">
+    <span class="label">steps</span>
+    <div class="timeline">
+      {% for s in panel.steps %}
+      <div class="tl {{ s.state }}">
+        <span class="dot">{{ '✓' if s.state == 'done' else loop.index }}</span>
+        <div class="body">
+          <b>{{ s.name }}</b>
+          <span class="sub">{{ 'done' if s.state == 'done' else ('in progress' if s.state == 'now' else 'pending') }}</span>
+          {% if s.state == 'now' and s.pct %}<div class="mini"><i style="width:{{ s.pct }}%"></i></div>{% endif %}
+        </div>
+        <span class="when">{{ s.when }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="panel">
+    <span class="label">result</span>
+    {% set files = detail.result.files if detail.result and detail.result.files else [] %}
+    {% for file in files %}
+    {% if file.url is playable %}
+    <div class="res">
+      {% if file.mime.startswith('audio') %}
+      <button class="play" type="button" aria-label="play" data-src="{{ file.url }}">▶</button>
+      {% else %}
+      <a class="play" href="{{ file.url }}" aria-label="download" style="text-decoration:none;display:grid;place-items:center">↓</a>
+      {% endif %}
+      <div class="meta"><span class="t">{{ file.name }}</span><a href="{{ file.url }}" class="muted" style="font-size:12px">download</a></div>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="res" style="background:var(--bg)"><button class="play" type="button" disabled style="opacity:.4">▶</button><div class="meta"><span class="t muted">appears here when it is done</span></div></div>
+    {% endfor %}
+    <span class="label">events</span>
+    <div class="log">
+      {% for line in logs %}<div><span class="t">{{ line.time }}</span> {{ line.text }}</div>{% else %}<p class="muted">no events yet.</p>{% endfor %}
+    </div>
+  </div>
+</div>

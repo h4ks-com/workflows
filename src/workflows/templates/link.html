@@ -1,10 +1,15 @@
 {% extends "base.html" %}
-{% block title %}Link IRC account{% endblock %}
+{% block title %}link IRC account · h4ks workflows{% endblock %}
 {% block content %}
-<h1>Link IRC account {{ link_request.irc_account }}</h1>
-<p>Nick: {{ link_request.nick }}</p>
-<form method="post">
-<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-<button type="submit">link this account to me</button>
-</form>
+<section class="page">
+<div class="panel">
+  <span class="label">link IRC account</span>
+  <h1>{{ link_request.irc_account }}</h1>
+  <p class="muted">nick: {{ link_request.nick }}</p>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn">link this account to me</button>
+  </form>
+</div>
+</section>
 {% endblock %}

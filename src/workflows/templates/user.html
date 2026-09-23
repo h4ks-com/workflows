@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ username }} · h4ks workflows{% endblock %}
+{% block content %}
+<section class="page">
+<h1>{{ username }}</h1>
+<div class="panel">
+  <span class="label">job history</span>
+  <div class="queue">
+    {% for job in jobs %}
+    <div class="q"><span class="pos">#{{ job.id }}</span><span class="what"><b>{{ job.type }}</b><small>{{ job.status }}</small></span><a class="tag" href="/jobs/{{ job.id }}">view</a><span></span></div>
+    {% else %}
+    <p class="muted">no jobs yet, <a href="/">order one</a>.</p>
+    {% endfor %}
+  </div>
+</div>
+</section>
+{% endblock %}

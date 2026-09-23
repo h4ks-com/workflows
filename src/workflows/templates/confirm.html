@@ -1,14 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Confirm job{% endblock %}
+{% block title %}confirm job · h4ks workflows{% endblock %}
 {% block content %}
-<h1>Confirm your {{ job_type.title }} job</h1>
-<p>{{ job_type.description }}</p>
-<p>Price: {{ job.quote }} credits</p>
-<form method="post">
-<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-{% if job.irc_account %}
-<label><input type="checkbox" name="link_account" value="true"> link IRC account {{ job.irc_account }} to me</label>
-{% endif %}
-<button type="submit">confirm and pay</button>
-</form>
+<section class="page">
+<div class="panel">
+  <span class="label">confirm your job</span>
+  <h1>~/{{ job_type.name }}</h1>
+  <p class="muted">{{ job_type.description }}</p>
+  <div class="kv"><span>price</span><span>{{ job.quote }} credits</span></div>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if job.irc_account %}
+    <label class="row" style="font:13px var(--mono);color:var(--mid)"><input type="checkbox" name="link_account" value="true" style="width:auto" checked> link IRC account {{ job.irc_account }} to me</label>
+    {% endif %}
+    <button type="submit" class="btn">confirm and pay</button>
+  </form>
+</div>
+</section>
 {% endblock %}

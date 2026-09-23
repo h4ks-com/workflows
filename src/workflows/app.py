@@ -1,13 +1,15 @@
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
+from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from workflows import account, admin, api, irc, stream
+from workflows import account, admin, api, irc, stream, web
 from workflows.beans import BeansPoller
 from workflows.bus import EventBus
 from workflows.db import connect, session_factory
@@ -28,14 +30,39 @@ ERROR_STATUS = {
     InsufficientCreditsError: 402,
     ProbeError: 502,
 }
+STATIC_DIR = Path(__file__).parent / "static"
+CSP = (
+    "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+    "font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; "
+    "img-src 'self' data:"
+)
 
 
 async def _domain_error(request: Request, error: Exception) -> JSONResponse:
     return JSONResponse({"detail": str(error)}, status_code=ERROR_STATUS[type(error)])
 
 
+async def _security_headers(
+    request: Request, call_next: Callable[[Request], Awaitable[Response]]
+) -> Response:
+    response = await call_next(request)
+    response.headers["Content-Security-Policy"] = CSP
+    return response
+
+
 async def healthz() -> dict[str, str]:
     return {"status": "ok"}
+
+
+def _register_routers(app: FastAPI) -> None:
+    app.include_router(api.router)
+    app.include_router(account.router)
+    app.include_router(irc.router)
+    app.include_router(irc.pages_router)
+    app.include_router(admin.router)
+    app.include_router(login_router)
+    app.include_router(stream.router)
+    app.include_router(web.router)
 
 
 def create_app(settings: Settings | None = None, prober: Prober | None = None) -> FastAPI:
@@ -82,6 +109,7 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
     app = FastAPI(title="h4ks workflows", lifespan=lifespan)
     app.state.services = services
     app.state.mcp = mcp
+    app.middleware("http")(_security_headers)
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.session_secret,
@@ -89,13 +117,8 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
     )
     for error_type in ERROR_STATUS:
         app.add_exception_handler(error_type, _domain_error)
-    app.include_router(api.router)
-    app.include_router(account.router)
-    app.include_router(irc.router)
-    app.include_router(irc.pages_router)
-    app.include_router(admin.router)
-    app.include_router(login_router)
-    app.include_router(stream.router)
+    _register_routers(app)
     app.mount("/mcp", mcp_app)
+    app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
     app.add_api_route("/healthz", healthz)
     return app

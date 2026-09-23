@@ -1,0 +1,21 @@
+<span class="label">quote</span>
+{% if error %}
+<p class="muted">{{ error }}</p>
+<button type="submit" class="btn" disabled>queue it</button>
+{% elif quote %}
+<div class="big">{{ quote.credits }} <small>credits</small></div>
+<div class="kv">
+  {% if quote.probe %}
+  <span>input length</span><span>{{ (quote.probe.duration_seconds // 60)|int }}:{{ "%02d"|format(quote.probe.duration_seconds % 60) }}</span>
+  <span>title</span><span>{{ quote.probe.title }}</span>
+  {% endif %}
+  <span>pricing</span><span>{{ job_type.pricing }}</span>
+  <span>beans needed</span><span>{{ quote.beans }}</span>
+  <span class="total">total</span><span class="total">{{ quote.credits }} cr</span>
+</div>
+<button type="submit" class="btn">queue it · {{ quote.credits }} cr</button>
+<small class="muted">refunded in full if it fails.</small>
+{% else %}
+<p class="muted">fill in the form to see your price.</p>
+<button type="submit" class="btn" disabled>queue it</button>
+{% endif %}

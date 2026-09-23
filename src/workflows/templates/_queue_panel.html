@@ -1,0 +1,72 @@
+{% if running %}
+<div class="panel">
+  <span class="label">now playing on the GPU</span>
+  <div class="now">
+    <div class="ring" aria-label="{{ running.eta_label }} left">
+      <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" fill="none" stroke="#1d2238" stroke-width="8"/><circle cx="50" cy="50" r="44" fill="none" stroke="#5c9eff" stroke-width="8" stroke-dasharray="276.5" stroke-dashoffset="{{ running.ring_offset }}"/></svg>
+      <div class="center"><div><b>{{ running.eta_label }}</b><span>left</span></div></div>
+    </div>
+    <div class="info">
+      <div class="row">
+        <span class="tag run">{{ running.job.type }}</span>
+        <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span class="muted num">#{{ running.job.id }}{% if running.job.owner %} · {{ running.job.owner }}{% endif %}</span>
+      </div>
+      <h2><a href="/jobs/{{ running.job.id }}">job #{{ running.job.id }}</a></h2>
+      <div class="steps" aria-label="steps">
+        {% for s in running.steps %}
+        <div class="step {{ s.state }}" style="--w:{{ s.weight }};--p:{{ s.pct }}%"><div class="track"><span class="fill"></span></div><span class="name">{{ s.label }}</span></div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="grid-2">
+  <div class="panel">
+    <div class="row"><span class="label">waiting · {{ queue.queued|length }}</span></div>
+    <div class="queue">
+      {% for slot in queue.queued %}
+      <div class="q {{ 'me' if me and slot.owner == me.username else '' }}">
+        <span class="pos">#{{ slot.position }}</span>
+        <span class="what"><b>{{ slot.owner or 'irc' }}</b> · {{ slot.type }}<small><a href="/jobs/{{ slot.id }}">job #{{ slot.id }}</a></small></span>
+        <span class="tag {{ 'wait' if me and slot.owner == me.username else '' }}">{{ 'you' if me and slot.owner == me.username else 'queued' }}</span>
+        <span class="num muted eta">~{{ (slot.starts_in_seconds // 60) if slot.starts_in_seconds is not none else '?' }} min</span>
+      </div>
+      {% else %}
+      <p class="muted">queue is empty, <a href="/">order something</a> to fill it.</p>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="panel">
+    <span class="label">make something</span>
+    <div class="cards" style="grid-template-columns: 1fr 1fr;">
+      {% for t in types %}
+      {% if t.available %}
+      <a class="type" href="/order/{{ t.name }}"><span class="glyph">~/{{ t.name }}</span><p>{{ t.description }}</p><span class="price">{{ t.pricing }}</span></a>
+      {% else %}
+      <div class="type soon"><span class="glyph">~/{{ t.name }}</span><p>{{ t.description }}</p><span class="price">coming soon</span></div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="row"><span class="label">just finished</span></div>
+  <div class="feed">
+    {% for job in recent %}
+    <div class="res">
+      {% set playable = job.result and job.result.files %}
+      <button class="play" type="button" aria-label="play"
+        {% if not playable %}disabled style="opacity:.4"{% endif %}
+        {% for file in (job.result.files if job.result else []) %}{% if loop.first and file.mime.startswith('audio') and file.url is playable %}data-src="{{ file.url }}"{% endif %}{% endfor %}
+      >▶</button>
+      <div class="meta"><span class="t"><b>{{ job.result.title if job.result and job.result.title else 'job #' ~ job.id }}</b> <span class="muted">· {{ job.type }}{% if job.owner %} · {{ job.owner }}{% endif %}</span></span><canvas class="wave" data-seed="{{ job.id }}"></canvas></div>
+    </div>
+    {% else %}
+    <p class="muted">nothing finished yet.</p>
+    {% endfor %}
+  </div>
+</div>

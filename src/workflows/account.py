@@ -53,8 +53,18 @@ def get_or_create_user(session: Session, logto_sub: str, username: str) -> User:
     return user
 
 
-def _irc_accounts(session: Session, user: User) -> list[str]:
+def irc_accounts(session: Session, user: User) -> list[str]:
     query = select(IrcLink.irc_account).where(IrcLink.user_id == user.id)
+    return list(session.scalars(query))
+
+
+def ledger_entries(session: Session, user: User, limit: int = LEDGER_LIMIT) -> list[LedgerEntry]:
+    query = (
+        select(LedgerEntry)
+        .where(LedgerEntry.user_id == user.id)
+        .order_by(LedgerEntry.id.desc())
+        .limit(limit)
+    )
     return list(session.scalars(query))
 
 
@@ -67,18 +77,12 @@ async def get_me(user: LoggedInUser, session: Db, services: AppServices) -> MeVi
         free_credits=user.free_credits,
         paid_credits=user.paid_credits,
         admin=is_admin(user, services.settings),
-        irc_accounts=_irc_accounts(session, user),
+        irc_accounts=irc_accounts(session, user),
     )
 
 
 @router.get("/me/ledger")
 async def get_ledger(user: LoggedInUser, session: Db) -> list[LedgerEntryView]:
-    query = (
-        select(LedgerEntry)
-        .where(LedgerEntry.user_id == user.id)
-        .order_by(LedgerEntry.id.desc())
-        .limit(LEDGER_LIMIT)
-    )
     return [
         LedgerEntryView(
             kind=entry.kind,
@@ -88,11 +92,14 @@ async def get_ledger(user: LoggedInUser, session: Db) -> list[LedgerEntryView]:
             note=entry.note,
             created_at=entry.created_at,
         )
-        for entry in session.scalars(query)
+        for entry in ledger_entries(session, user)
     ]
+
+
+def topup_url(beans_url: str, username: str, beans: int) -> str:
+    return f"{beans_url}/transfer/{username}/workflows/{beans}"
 
 
 @router.post("/topups")
 async def create_topup(body: TopupRequest, user: LoggedInUser, services: AppServices) -> TopupView:
-    url = f"{services.settings.beans_url}/transfer/{user.username}/workflows/{body.beans}"
-    return TopupView(beans_url=url)
+    return TopupView(beans_url=topup_url(services.settings.beans_url, user.username, body.beans))

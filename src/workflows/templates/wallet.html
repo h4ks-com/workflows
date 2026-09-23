@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}wallet · h4ks workflows{% endblock %}
+{% block content %}
+<section class="page">
+<h1>wallet</h1>
+<div class="stats">
+  <div class="stat"><span class="label">balance</span><b>{{ "{:,}".format(me.free_credits + me.paid_credits) }} cr</b><span class="muted num">= {{ "%.2f"|format((me.free_credits + me.paid_credits) / credits_per_bean) }} beans</span></div>
+  <div class="stat"><span class="label">free today</span><b>{{ me.free_credits }} cr</b><div class="meter" aria-label="{{ me.free_credits }} of {{ free_daily }} left"><i style="width:{{ (me.free_credits / free_daily * 100)|round|int }}%"></i></div><span class="muted">resets at midnight, never piles up</span></div>
+  <div class="stat"><span class="label">in the queue</span><b>{{ reserved }} cr</b><span class="muted">reserved, refunded if it fails</span></div>
+</div>
+
+<div class="grid-2">
+  <div class="panel">
+    <span class="label">top up with beans</span>
+    <form method="post" action="/wallet/topup" id="topup-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="topup">
+        {% for beans in [5, 10, 25, 50] %}
+        <button type="button" class="{{ 'on' if beans == 10 else '' }}" data-beans="{{ beans }}">{{ beans }}<small>{{ "{:,}".format(beans * credits_per_bean) }} cr</small></button>
+        {% endfor %}
+      </div>
+      <input type="hidden" name="beans" id="topup-beans" value="10">
+      <div class="row"><button type="submit" class="btn warm">pay on beans.h4ks.com</button><span class="muted" style="font-size:13px">confirm there, credits land here within a minute.</span></div>
+    </form>
+    {% if irc_accounts %}
+    <span class="label">linked accounts</span>
+    <div class="kv"><span>logto</span><span>{{ me.username }}</span>{% for acct in irc_accounts %}<span>irc</span><span>{{ acct }} ✓</span>{% endfor %}</div>
+    {% endif %}
+  </div>
+  <div class="panel">
+    <span class="label">history</span>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>when</th><th>what</th><th style="text-align:right">credits</th></tr></thead>
+        <tbody>
+          {% for entry in ledger %}
+          {% set total = entry.free_delta + entry.paid_delta %}
+          <tr>
+            <td>{{ entry.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
+            <td>{{ entry.kind }}{% if entry.job_id %} · job #{{ entry.job_id }}{% endif %}{% if entry.note %} · {{ entry.note }}{% endif %}</td>
+            <td class="{{ 'plus' if total >= 0 else 'minus' }}" style="text-align:right">{{ "%+d"|format(total) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="3" class="muted">no history yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+</section>
+{% endblock %}
