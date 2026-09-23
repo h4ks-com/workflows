@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.responses import Response
 
-from workflows.api import JobView, job_type_or_404, job_view
+from workflows.api import JobView, get_job_type, job_view
 from workflows.auth import csrf_token, current_user, require_service, verify_csrf
 from workflows.db import IrcLink, Job, JobStatus, JsonObject, LinkRequest, User, utcnow
 from workflows.jobs import announce, create_job, enqueue, ensure_available, hash_token
@@ -94,7 +94,7 @@ def _submit_awaiting_confirmation(
 
 @router.post("/api/irc/submit", status_code=status.HTTP_201_CREATED)
 async def irc_submit(body: IrcSubmitRequest, session: Db, services: AppServices) -> IrcSubmitView:
-    job_type = job_type_or_404(services, body.type)
+    job_type = get_job_type(services, body.type)
     ensure_available(job_type)
     try:
         params = job_type.params_model.model_validate(body.params)

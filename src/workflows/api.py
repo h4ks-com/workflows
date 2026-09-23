@@ -110,7 +110,7 @@ class QueueView(BaseModel):
     queued: list[JobView] = Field(description="Waiting jobs, first in line first.")
 
 
-def _type_view(job_type: JobType) -> JobTypeView:
+def type_view(job_type: JobType) -> JobTypeView:
     return JobTypeView(
         name=job_type.name,
         title=job_type.title,
@@ -149,7 +149,7 @@ def job_view(job: Job, job_type: JobType, slot: QueueSlot | None = None) -> JobV
     )
 
 
-def job_type_or_404(services: Services, name: str) -> JobType:
+def get_job_type(services: Services, name: str) -> JobType:
     job_type = services.registry.get(name)
     if job_type is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"no job type named {name}")
@@ -163,10 +163,10 @@ def get_job_or_404(session: Session, job_id: int) -> Job:
     return job
 
 
-async def priced_request(
+async def price_request(
     services: Services, request: QuoteRequest
 ) -> tuple[JobType, JobParams, Quote]:
-    job_type = job_type_or_404(services, request.type)
+    job_type = get_job_type(services, request.type)
     ensure_available(job_type)
     try:
         params = job_type.params_model.model_validate(request.params)
@@ -174,6 +174,46 @@ async def priced_request(
         detail = error.errors(include_url=False, include_context=False)
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail) from error
     return job_type, params, await quote(params, services.prober)
+
+
+def quote_view(priced: Quote) -> QuoteView:
+    probe = priced.probe
+    return QuoteView(
+        credits=priced.credits,
+        beans=-(-priced.credits // CREDITS_PER_BEAN),
+        probe=ProbeView(duration_seconds=probe.duration_seconds, title=probe.title)
+        if probe
+        else None,
+        estimate_seconds=priced.estimate_seconds,
+    )
+
+
+def queue_view(session: Session, services: Services) -> QueueView:
+    running, queued = Estimator(session, services.registry).queue()
+    registry = services.registry
+    return QueueView(
+        paused=services.worker.paused,
+        running=job_view(running.job, registry[running.job.type], running) if running else None,
+        queued=[job_view(slot.job, registry[slot.job.type], slot) for slot in queued],
+    )
+
+
+def job_views(session: Session, services: Services, user: str | None, limit: int) -> list[JobView]:
+    query = select(Job).order_by(Job.id.desc()).limit(limit)
+    if user is not None:
+        query = query.join(Job.owner).where(User.username == user)
+    return [job_view(job, services.registry[job.type]) for job in session.scalars(query)]
+
+
+def job_detail_view(session: Session, services: Services, job_id: int) -> JobDetailView:
+    job = get_job_or_404(session, job_id)
+    slot = Estimator(session, services.registry).slot(job)
+    view = job_view(job, services.registry[job.type], slot)
+    events = [
+        JobEventView(kind=event.kind, data=event.data, created_at=event.created_at)
+        for event in job.events
+    ]
+    return JobDetailView(**view.model_dump(), events=events)
 
 
 def _user_named(session: Db, username: str | None) -> User:
@@ -214,32 +254,18 @@ def _ensure_callback_token(request: Request, job: Job) -> None:
 
 @router.get("/types")
 async def list_types(services: AppServices) -> list[JobTypeView]:
-    return [_type_view(job_type) for job_type in services.registry.values()]
+    return [type_view(job_type) for job_type in services.registry.values()]
 
 
 @router.post("/quote")
 async def quote_job(body: QuoteRequest, services: AppServices) -> QuoteView:
-    _, _, priced = await priced_request(services, body)
-    probe = priced.probe
-    return QuoteView(
-        credits=priced.credits,
-        beans=-(-priced.credits // CREDITS_PER_BEAN),
-        probe=ProbeView(duration_seconds=probe.duration_seconds, title=probe.title)
-        if probe
-        else None,
-        estimate_seconds=priced.estimate_seconds,
-    )
+    _, _, priced = await price_request(services, body)
+    return quote_view(priced)
 
 
 @router.get("/queue")
 async def get_queue(session: Db, services: AppServices) -> QueueView:
-    running, queued = Estimator(session, services.registry).queue()
-    registry = services.registry
-    return QueueView(
-        paused=services.worker.paused,
-        running=job_view(running.job, registry[running.job.type], running) if running else None,
-        queued=[job_view(slot.job, registry[slot.job.type], slot) for slot in queued],
-    )
+    return queue_view(session, services)
 
 
 @router.get("/jobs")
@@ -249,22 +275,12 @@ async def list_jobs(
     user: str | None = None,
     limit: Annotated[int, Query(ge=1, le=MAX_JOB_LIMIT)] = DEFAULT_JOB_LIMIT,
 ) -> list[JobView]:
-    query = select(Job).order_by(Job.id.desc()).limit(limit)
-    if user is not None:
-        query = query.join(Job.owner).where(User.username == user)
-    return [job_view(job, services.registry[job.type]) for job in session.scalars(query)]
+    return job_views(session, services, user, limit)
 
 
 @router.get("/jobs/{job_id}")
 async def get_job(job_id: int, session: Db, services: AppServices) -> JobDetailView:
-    job = get_job_or_404(session, job_id)
-    slot = Estimator(session, services.registry).slot(job)
-    view = job_view(job, services.registry[job.type], slot)
-    events = [
-        JobEventView(kind=event.kind, data=event.data, created_at=event.created_at)
-        for event in job.events
-    ]
-    return JobDetailView(**view.model_dump(), events=events)
+    return job_detail_view(session, services, job_id)
 
 
 @router.post("/jobs", status_code=status.HTTP_201_CREATED)
@@ -272,7 +288,7 @@ async def submit_job(
     body: SubmitRequest, request: Request, user: CurrentUser, session: Db, services: AppServices
 ) -> JobView:
     owner = _submitter(request, services, session, user, body)
-    job_type, params, priced = await priced_request(services, body)
+    job_type, params, priced = await price_request(services, body)
     job = create_job(session, job_type, params, priced, owner)
     enqueue(session, job, owner)
     session.commit()
