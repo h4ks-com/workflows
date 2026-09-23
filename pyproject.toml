@@ -81,6 +81,7 @@ plugins = ["pydantic.mypy"]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 asyncio_mode = "auto"
+markers = ["e2e: end-to-end tests against a running compose stack (make e2e)"]
 
 [tool.coverage.run]
 source = ["workflows"]
@@ -97,6 +98,7 @@ min_confidence = 80
 
 [tool.deptry]
 known_first_party = ["workflows"]
+exclude = ["venv", "\\.venv", "\\.direnv", "tests", "e2e", "\\.git", "setup\\.py"]
 per_rule_ignores = { "DEP002" = ["uvicorn", "jinja2", "authlib", "itsdangerous", "sse-starlette", "fastmcp", "python-multipart"] }
 
 [tool.bandit]

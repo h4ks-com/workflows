@@ -1,6 +1,6 @@
 PYTHON := uv run
 
-.PHONY: install fix precommit format format-check lint lint-fix imports imports-check typecheck dead-code unused-deps security audit test coverage build quality ci docker-build docker-run run clean
+.PHONY: install fix precommit format format-check lint lint-fix imports imports-check typecheck dead-code unused-deps security audit test coverage build quality ci docker-build docker-run run clean e2e-up e2e e2e-down
 
 install:
 	uv sync
@@ -68,3 +68,12 @@ docker-run:
 
 clean:
 	rm -rf .mypy_cache .pytest_cache .ruff_cache .coverage .coverage.* htmlcov dist build *.egg-info .vulture
+
+e2e-up:
+	docker compose up -d --build --wait
+
+e2e:
+	$(PYTHON) pytest e2e -m e2e
+
+e2e-down:
+	docker compose down -v

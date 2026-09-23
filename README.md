@@ -8,3 +8,10 @@ cp .env.example .env
 make run
 make quality
 ```
+
+```sh
+docker compose up
+make e2e-up
+make e2e
+make e2e-down
+```
