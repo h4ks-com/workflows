@@ -2058,6 +2058,18 @@ wheels = [
 ]
 
 [[package]]
+name = "types-authlib"
+version = "1.8.0.20260911"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cryptography" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9c/d8/e78ecbe9a5a077f5ccfec1f284ace4e8ae55ce204ec8bd1b00d86a83974a/types_authlib-1.8.0.20260911.tar.gz", hash = "sha256:cde5e55bca5e908438facc8fc701197bf540af880dff7b8ca8cf40a08258a62a", size = 51835, upload-time = "2026-09-11T06:45:26.216Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e2/65/d9206c38d65602867f15bda7836b1248295b31f3187a09cc1f6195539ebe/types_authlib-1.8.0.20260911-py3-none-any.whl", hash = "sha256:0617c4a2361a605144bae0850f70c18edd5265abec11af66235a02a1b415444e", size = 111525, upload-time = "2026-09-11T06:45:25.033Z" },
+]
+
+[[package]]
 name = "typing-extensions"
 version = "4.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2322,6 +2334,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "respx" },
     { name = "ruff" },
+    { name = "types-authlib" },
     { name = "vulture" },
 ]
 
@@ -2353,5 +2366,6 @@ dev = [
     { name = "pytest-cov", specifier = "==7.1.0" },
     { name = "respx", specifier = "==0.23.1" },
     { name = "ruff", specifier = "==0.16.8" },
+    { name = "types-authlib", specifier = "==1.8.0.20260911" },
     { name = "vulture", specifier = "==2.16" },
 ]

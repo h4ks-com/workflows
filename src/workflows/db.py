@@ -78,6 +78,18 @@ class IrcLink(Base):
     user: Mapped[User] = relationship()
 
 
+class LinkRequest(Base):
+    __tablename__ = "link_requests"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    irc_account: Mapped[str]
+    nick: Mapped[str]
+    token_hash: Mapped[str] = mapped_column(unique=True)
+    used: Mapped[bool] = mapped_column(default=False)
+    expires_at: Mapped[datetime]
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
 class Job(Base):
     __tablename__ = "jobs"
 

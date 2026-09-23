@@ -1,4 +1,5 @@
 import hmac
+import secrets
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
@@ -8,6 +9,7 @@ from workflows.settings import Settings
 from workflows.state import AppServices, Db
 
 SESSION_USER_KEY = "user_id"
+CSRF_SESSION_KEY = "csrf_token"
 BEARER_PREFIX = "Bearer "
 
 
@@ -53,3 +55,17 @@ async def require_admin(user: LoggedInUser, services: AppServices) -> User:
 async def require_service(request: Request, services: AppServices) -> None:
     if not is_service(request, services.settings):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "service token required")
+
+
+def csrf_token(request: Request) -> str:
+    token = request.session.get(CSRF_SESSION_KEY)
+    if not isinstance(token, str):
+        token = secrets.token_urlsafe(32)
+        request.session[CSRF_SESSION_KEY] = token
+    return token
+
+
+def verify_csrf(request: Request, token: str) -> None:
+    expected = request.session.get(CSRF_SESSION_KEY)
+    if not isinstance(expected, str) or not hmac.compare_digest(expected.encode(), token.encode()):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "invalid or missing csrf token")

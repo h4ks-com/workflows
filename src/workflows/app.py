@@ -7,12 +7,16 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
-from workflows import api
+from workflows import account, admin, api, irc
+from workflows.beans import BeansPoller
 from workflows.bus import EventBus
 from workflows.db import connect, session_factory
 from workflows.jobs import InvalidEventError, JobError
 from workflows.jobtypes import ProbeError, Prober, YtdlProber, build_registry
 from workflows.ledger import InsufficientCreditsError
+from workflows.login import build_oauth
+from workflows.login import router as login_router
+from workflows.notify import notify_channels
 from workflows.settings import Settings, load_settings
 from workflows.state import Services
 from workflows.worker import QueueWorker
@@ -41,6 +45,7 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
     registry = build_registry(settings.executor_urls)
     bus = EventBus()
     worker = QueueWorker(sessions, registry, bus, http, settings)
+    beans_poller = BeansPoller(sessions, http, settings) if settings.beans_token else None
     services = Services(
         settings=settings,
         sessions=sessions,
@@ -48,15 +53,24 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
         bus=bus,
         prober=prober or YtdlProber(http, settings.ytdl_url, settings.ytdl_api_key),
         worker=worker,
+        http=http,
+        oauth=build_oauth(settings),
+        beans_poller=beans_poller,
     )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        task = asyncio.create_task(worker.run())
+        tasks = [asyncio.create_task(worker.run())]
+        if beans_poller is not None:
+            tasks.append(asyncio.create_task(beans_poller.run()))
+        if settings.cloudbot_url:
+            tasks.append(asyncio.create_task(notify_channels(services)))
         yield
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
+        for task in tasks:
+            task.cancel()
+        for task in tasks:
+            with suppress(asyncio.CancelledError):
+                await task
         await http.aclose()
         engine.dispose()
 
@@ -70,5 +84,10 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
     for error_type in ERROR_STATUS:
         app.add_exception_handler(error_type, _domain_error)
     app.include_router(api.router)
+    app.include_router(account.router)
+    app.include_router(irc.router)
+    app.include_router(irc.pages_router)
+    app.include_router(admin.router)
+    app.include_router(login_router)
     app.add_api_route("/healthz", healthz)
     return app

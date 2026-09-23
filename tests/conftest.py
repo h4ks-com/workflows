@@ -77,7 +77,7 @@ def session(services: Services) -> Iterator[Session]:
 
 @pytest.fixture
 def client(app: FastAPI) -> TestClient:
-    return TestClient(app)
+    return TestClient(app, base_url="https://testserver")
 
 
 def make_user(session: Session, username: str, paid_credits: int = 0) -> User:
