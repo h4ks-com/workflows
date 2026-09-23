@@ -10,9 +10,9 @@
       <div class="row">
         <span class="tag run">{{ running.job.type }}</span>
         <span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-        <span class="muted num">#{{ running.job.id }}{% if running.job.owner %} · {{ running.job.owner }}{% endif %}</span>
+        {% if running.job.owner %}<span class="muted">by {{ running.job.owner }}</span>{% endif %}
       </div>
-      <h2><a href="/jobs/{{ running.job.id }}">job #{{ running.job.id }}</a></h2>
+      <h2><a href="/jobs/{{ running.job.id }}">{{ running.job.type }} #{{ running.job.id }}</a></h2>
       <div class="steps" aria-label="steps">
         {% for s in running.steps %}
         <div class="step {{ s.state }}" style="--w:{{ s.weight }};--p:{{ s.pct }}%"><div class="track"><span class="fill"></span></div><span class="name">{{ s.label }}</span></div>
@@ -30,7 +30,7 @@
       {% for slot in queue.queued %}
       <div class="q {{ 'me' if me and slot.owner == me.username else '' }}">
         <span class="pos">#{{ slot.position }}</span>
-        <span class="what"><b>{{ slot.owner or 'guest' }}</b> · {{ slot.type }}<small><a href="/jobs/{{ slot.id }}">job #{{ slot.id }}</a></small></span>
+        <span class="what"><b>{{ slot.owner or 'guest' }}</b> · {{ slot.type }}<small><a href="/jobs/{{ slot.id }}">open</a></small></span>
         <span class="tag {{ 'wait' if me and slot.owner == me.username else '' }}">{{ 'you' if me and slot.owner == me.username else 'in line' }}</span>
         <span class="num muted eta">~{{ (slot.starts_in_seconds // 60) if slot.starts_in_seconds is not none else '?' }} min</span>
       </div>
@@ -41,7 +41,7 @@
   </div>
   <div class="panel">
     <span class="label" id="create">create</span>
-    <div class="cards" style="grid-template-columns: 1fr 1fr;">
+    <div class="cards">
       {% for t in types %}
       {% if t.available %}
       <a class="type" href="/order/{{ t.name }}"><span class="glyph">~/{{ t.name }}</span><p>{{ t.description }}</p><span class="price">{{ t.pricing }}</span></a>
@@ -64,7 +64,7 @@
       {% elif file and file.url is playable %}
       <a href="{{ file.url }}" class="muted">download</a>
       {% endif %}
-      <div class="meta"><span class="t"><b>{{ job.result.title if job.result and job.result.title else 'job #' ~ job.id }}</b> <span class="muted">· {{ job.type }}{% if job.owner %} · {{ job.owner }}{% endif %}</span></span><canvas class="wave" data-seed="{{ job.id }}"></canvas></div>
+      <div class="meta"><span class="t"><b>{{ job.result.title if job.result and job.result.title else job.type ~ ' #' ~ job.id }}</b> <span class="muted">· {{ job.type }}{% if job.owner %} · {{ job.owner }}{% endif %}</span></span><canvas class="wave" data-seed="{{ job.id }}"></canvas></div>
     </div>
     {% else %}
     <p class="muted">nothing finished yet.</p>

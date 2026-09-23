@@ -43,11 +43,13 @@
         <tbody>
           {% for entry in ledger %}
           {% set total = entry.free_delta + entry.paid_delta %}
+          {% if total %}
           <tr>
-            <td>{{ entry.created_at.strftime("%Y-%m-%d %H:%M") }}</td>
-            <td>{{ entry.kind|ledger_label }}{% if entry.job_id %} · job #{{ entry.job_id }}{% endif %}{% if entry.note %} · {{ entry.note }}{% endif %}</td>
+            <td>{{ entry.created_at.strftime("%b %d %H:%M") }}</td>
+            <td>{{ entry.kind|ledger_label }}{% if entry.job_id %} <a href="/jobs/{{ entry.job_id }}">job #{{ entry.job_id }}</a>{% endif %}{% if entry.note %} · {{ entry.note }}{% endif %}</td>
             <td class="{{ 'plus' if total >= 0 else 'minus' }}" style="text-align:right">{{ "%+d"|format(total) }}</td>
           </tr>
+          {% endif %}
           {% else %}
           <tr><td colspan="3" class="muted">no history yet.</td></tr>
           {% endfor %}

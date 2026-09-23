@@ -10,7 +10,7 @@
 {% if error %}<div class="notice warn">{{ error }}</div>{% endif %}
 {% if not me %}<div class="notice">log in to submit this job. <a href="/login?next=/order/{{ job_type.name }}">log in</a></div>{% endif %}
 <form method="post" action="/order/{{ job_type.name }}" class="form-grid" id="order-form"
-  hx-post="/order/{{ job_type.name }}/quote" hx-trigger="input changed delay:400ms, change, click from:.seg button delay:100ms"
+  hx-post="/order/{{ job_type.name }}/quote" hx-trigger="input changed delay:400ms, change"
   hx-target="#quote-panel" hx-swap="innerHTML">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <div class="panel">

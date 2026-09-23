@@ -3,9 +3,9 @@
     <div class="row">
       <span class="tag {{ 'run' if detail.status == 'running' else ('ok' if detail.status == 'succeeded' else ('bad' if detail.status in ('failed', 'cancelled') else 'wait')) }}">{{ detail.status|status_label }}</span>
       <span class="tag">{{ detail.type }}</span>
-      <span class="muted num">#{{ detail.id }}{% if detail.owner %} · {{ detail.owner }}{% endif %}</span>
+      {% if detail.owner %}<span class="muted">by <a href="/u/{{ detail.owner }}">{{ detail.owner }}</a></span>{% endif %}
     </div>
-    <h1>{{ detail.result.title if detail.result and detail.result.title else job_type.title ~ ' job #' ~ detail.id }}</h1>
+    <h1>{{ detail.result.title if detail.result and detail.result.title else job_type.title ~ ' #' ~ detail.id }}</h1>
   </div>
   <div class="kv" style="min-width:220px">
     {% if detail.eta_seconds is not none %}<span>time left</span><span data-eta="{{ detail.eta_seconds }}">~{{ panel.eta_label }}</span>{% endif %}

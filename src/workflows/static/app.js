@@ -27,7 +27,10 @@
     if (seg) {
       seg.parentElement.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b === seg));
       const hidden = seg.closest(".seg").nextElementSibling;
-      if (hidden && hidden.matches("input[type=hidden]")) hidden.value = seg.dataset.value || seg.textContent.trim();
+      if (hidden && hidden.matches("input[type=hidden]")) {
+        hidden.value = seg.dataset.value || seg.textContent.trim();
+        hidden.dispatchEvent(new Event("change", { bubbles: true }));
+      }
     }
     const topup = event.target.closest(".topup button");
     if (topup) {

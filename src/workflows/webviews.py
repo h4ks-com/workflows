@@ -157,9 +157,9 @@ STATUS_LABELS = {
 LEDGER_LABELS = {
     LedgerKind.FREE_GRANT: "daily free credits",
     LedgerKind.TOPUP: "top-up",
-    LedgerKind.RESERVE: "held for a job",
-    LedgerKind.CAPTURE: "paid for a job",
-    LedgerKind.REFUND: "refund",
+    LedgerKind.RESERVE: "paid for",
+    LedgerKind.CAPTURE: "charged for",
+    LedgerKind.REFUND: "refund for",
     LedgerKind.ADMIN_ADJUST: "adjusted by an admin",
 }
 

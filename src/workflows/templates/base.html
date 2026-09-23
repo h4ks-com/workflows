@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
+<link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
 </head>
 <body>
 <div class="wrap">
@@ -21,7 +22,7 @@
     <span class="spacer"></span>
     {% if me %}
     <a class="chip" href="/wallet"><b>{{ "{:,}".format(me.free_credits + me.paid_credits) }} credits</b>{% if me.free_credits %}<span class="free">+{{ me.free_credits }} free today</span>{% endif %}</a>
-    <a class="who" href="/u/{{ me.username }}"><span class="avatar">{{ me.username[:2]|upper }}</span>{{ me.username }}</a>
+    <a class="who" href="/u/{{ me.username }}"><span class="avatar">{{ me.username[:2]|upper }}</span><span class="name">{{ me.username }}</span></a>
     <a class="btn ghost" href="/logout">log out</a>
     {% else %}
     <a class="btn" href="/login?next={{ request.url.path }}">log in</a>
