@@ -22,7 +22,12 @@ pytestmark = pytest.mark.e2e
 
 @pytest.fixture
 def client() -> Iterator[httpx.Client]:
-    with httpx.Client(base_url=E2E_BASE_URL, timeout=10.0, follow_redirects=True) as client:
+    with httpx.Client(
+        base_url=E2E_BASE_URL,
+        timeout=10.0,
+        follow_redirects=True,
+        headers={"X-Requested-With": "fetch"},
+    ) as client:
         yield client
 
 
