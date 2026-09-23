@@ -7,7 +7,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from workflows.bus import EventBus
 from workflows.db import Job, JobStatus, JsonObject, utcnow
-from workflows.jobs import announce, fail, queued_jobs, running_job, start
+from workflows.jobs import (
+    announce,
+    expire_stale_confirmations,
+    fail,
+    queued_jobs,
+    running_job,
+    start,
+)
 from workflows.jobtypes import JobType
 from workflows.settings import Settings
 
@@ -45,6 +52,10 @@ class QueueWorker:
             await asyncio.sleep(POLL_SECONDS)
 
     async def tick(self) -> None:
+        with self._sessions.begin() as session:
+            expired = expire_stale_confirmations(session)
+        for job in expired:
+            announce(self._bus, job)
         with self._sessions.begin() as session:
             running = running_job(session)
             if running is not None:

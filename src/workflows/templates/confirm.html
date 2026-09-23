@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Confirm job{% endblock %}
+{% block content %}
+<h1>Confirm your {{ job_type.title }} job</h1>
+<p>{{ job_type.description }}</p>
+<p>Price: {{ job.quote }} credits</p>
+<form method="post">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+{% if job.irc_account %}
+<label><input type="checkbox" name="link_account" value="true"> link IRC account {{ job.irc_account }} to me</label>
+{% endif %}
+<button type="submit">confirm and pay</button>
+</form>
+{% endblock %}

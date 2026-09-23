@@ -31,10 +31,13 @@ class Settings:
     beans_token: str = ""
     cloudbot_url: str = ""
     cloudbot_token: str = ""
+    dev_login: bool = False
 
     def __post_init__(self) -> None:
         if any(self.executor_urls.values()) and not self.executor_token:
             raise ValueError("WORKFLOWS_EXECUTOR_TOKEN is required when an executor URL is set")
+        if self.dev_login and self.base_url.startswith("https://"):
+            raise ValueError("DEV_LOGIN cannot be enabled when BASE_URL is https")
 
 
 def _executor_urls(environ: Mapping[str, str]) -> dict[str, str]:
@@ -70,4 +73,5 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
         beans_token=environ.get("BEANS_TOKEN", ""),
         cloudbot_url=environ.get("CLOUDBOT_URL", "").rstrip("/"),
         cloudbot_token=environ.get("CLOUDBOT_TOKEN", ""),
+        dev_login=environ.get("DEV_LOGIN", "").strip().lower() == "true",
     )

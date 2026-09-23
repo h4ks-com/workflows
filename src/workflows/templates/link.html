@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}Link IRC account{% endblock %}
+{% block content %}
+<h1>Link IRC account {{ link_request.irc_account }}</h1>
+<p>Nick: {{ link_request.nick }}</p>
+<form method="post">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<button type="submit">link this account to me</button>
+</form>
+{% endblock %}

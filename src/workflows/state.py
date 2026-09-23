@@ -2,9 +2,12 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Annotated, cast
 
+import httpx
+from authlib.integrations.starlette_client import OAuth
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session, sessionmaker
 
+from workflows.beans import BeansPoller
 from workflows.bus import EventBus
 from workflows.jobtypes import JobType, Prober
 from workflows.settings import Settings
@@ -19,6 +22,9 @@ class Services:
     bus: EventBus
     prober: Prober
     worker: QueueWorker
+    http: httpx.AsyncClient
+    oauth: OAuth | None
+    beans_poller: BeansPoller | None
 
 
 def get_services(request: Request) -> Services:

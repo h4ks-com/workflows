@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from workflows.auth import CurrentUser, LoggedInUser, bearer_token, is_admin, is_service
 from workflows.bus import BusEvent, job_topic
@@ -121,7 +122,7 @@ def _type_view(job_type: JobType) -> JobTypeView:
     )
 
 
-def _job_view(job: Job, job_type: JobType, slot: QueueSlot | None = None) -> JobView:
+def job_view(job: Job, job_type: JobType, slot: QueueSlot | None = None) -> JobView:
     progress = ProgressView(
         step=job.progress_step,
         done=job.progress_done,
@@ -148,22 +149,24 @@ def _job_view(job: Job, job_type: JobType, slot: QueueSlot | None = None) -> Job
     )
 
 
-def _job_type(services: Services, name: str) -> JobType:
+def job_type_or_404(services: Services, name: str) -> JobType:
     job_type = services.registry.get(name)
     if job_type is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"no job type named {name}")
     return job_type
 
 
-def _get_job(session: Db, job_id: int) -> Job:
+def get_job_or_404(session: Session, job_id: int) -> Job:
     job = session.get(Job, job_id)
     if job is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"no job {job_id}")
     return job
 
 
-async def _priced(services: Services, request: QuoteRequest) -> tuple[JobType, JobParams, Quote]:
-    job_type = _job_type(services, request.type)
+async def priced_request(
+    services: Services, request: QuoteRequest
+) -> tuple[JobType, JobParams, Quote]:
+    job_type = job_type_or_404(services, request.type)
     ensure_available(job_type)
     try:
         params = job_type.params_model.model_validate(request.params)
@@ -216,7 +219,7 @@ async def list_types(services: AppServices) -> list[JobTypeView]:
 
 @router.post("/quote")
 async def quote_job(body: QuoteRequest, services: AppServices) -> QuoteView:
-    _, _, priced = await _priced(services, body)
+    _, _, priced = await priced_request(services, body)
     probe = priced.probe
     return QuoteView(
         credits=priced.credits,
@@ -234,8 +237,8 @@ async def get_queue(session: Db, services: AppServices) -> QueueView:
     registry = services.registry
     return QueueView(
         paused=services.worker.paused,
-        running=_job_view(running.job, registry[running.job.type], running) if running else None,
-        queued=[_job_view(slot.job, registry[slot.job.type], slot) for slot in queued],
+        running=job_view(running.job, registry[running.job.type], running) if running else None,
+        queued=[job_view(slot.job, registry[slot.job.type], slot) for slot in queued],
     )
 
 
@@ -249,14 +252,14 @@ async def list_jobs(
     query = select(Job).order_by(Job.id.desc()).limit(limit)
     if user is not None:
         query = query.join(Job.owner).where(User.username == user)
-    return [_job_view(job, services.registry[job.type]) for job in session.scalars(query)]
+    return [job_view(job, services.registry[job.type]) for job in session.scalars(query)]
 
 
 @router.get("/jobs/{job_id}")
 async def get_job(job_id: int, session: Db, services: AppServices) -> JobDetailView:
-    job = _get_job(session, job_id)
+    job = get_job_or_404(session, job_id)
     slot = Estimator(session, services.registry).slot(job)
-    view = _job_view(job, services.registry[job.type], slot)
+    view = job_view(job, services.registry[job.type], slot)
     events = [
         JobEventView(kind=event.kind, data=event.data, created_at=event.created_at)
         for event in job.events
@@ -269,24 +272,24 @@ async def submit_job(
     body: SubmitRequest, request: Request, user: CurrentUser, session: Db, services: AppServices
 ) -> JobView:
     owner = _submitter(request, services, session, user, body)
-    job_type, params, priced = await _priced(services, body)
+    job_type, params, priced = await priced_request(services, body)
     job = create_job(session, job_type, params, priced, owner)
     enqueue(session, job, owner)
     session.commit()
     announce(services.bus, job)
-    return _job_view(job, job_type, Estimator(session, services.registry).slot(job))
+    return job_view(job, job_type, Estimator(session, services.registry).slot(job))
 
 
 @router.post("/jobs/{job_id}/cancel")
 async def cancel_job(
     job_id: int, user: LoggedInUser, session: Db, services: AppServices
 ) -> JobView:
-    job = _get_job(session, job_id)
+    job = get_job_or_404(session, job_id)
     _ensure_can_cancel(job, user, services)
     cancel(session, job)
     session.commit()
     announce(services.bus, job)
-    return _job_view(job, services.registry[job.type])
+    return job_view(job, services.registry[job.type])
 
 
 @router.post("/jobs/{job_id}/events", status_code=status.HTTP_204_NO_CONTENT)
@@ -297,7 +300,7 @@ async def executor_event(
     session: Db,
     services: AppServices,
 ) -> None:
-    job = _get_job(session, job_id)
+    job = get_job_or_404(session, job_id)
     _ensure_callback_token(request, job)
     data = apply_event(session, job, services.registry[job.type], event)
     session.commit()

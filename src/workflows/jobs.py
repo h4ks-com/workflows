@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import secrets
+from datetime import timedelta
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
@@ -14,6 +15,7 @@ from workflows.ledger import capture, refund, reserve
 
 STATUS_EVENT = "status"
 TERMINAL_STATUSES = frozenset({JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED})
+CONFIRMATION_EXPIRY = timedelta(hours=1)
 
 
 class JobError(Exception):
@@ -162,6 +164,17 @@ def apply_event(session: Session, job: Job, job_type: JobType, event: ExecutorEv
         case LogEvent():
             pass
     return data
+
+
+def expire_stale_confirmations(session: Session) -> list[Job]:
+    cutoff = utcnow() - CONFIRMATION_EXPIRY
+    query = select(Job).where(
+        Job.status == JobStatus.AWAITING_CONFIRMATION, Job.created_at < cutoff
+    )
+    stale = list(session.scalars(query))
+    for job in stale:
+        _finish(job, JobStatus.CANCELLED)
+    return stale
 
 
 def announce(bus: EventBus, job: Job) -> None:
