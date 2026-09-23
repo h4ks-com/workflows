@@ -22,9 +22,9 @@
       <input type="hidden" name="beans" id="topup-beans" value="10">
       <div class="row"><button type="submit" class="btn warm">pay on beans.h4ks.com</button><span class="muted" style="font-size:13px">confirm there, credits land here within a minute.</span></div>
     </form>
-    {% if irc_accounts %}
+    {% if identities %}
     <span class="label">linked accounts</span>
-    <div class="kv"><span>logto</span><span>{{ me.username }}</span>{% for acct in irc_accounts %}<span>irc</span><span>{{ acct }} ✓</span>{% endfor %}</div>
+    <div class="kv"><span>logto</span><span>{{ me.username }}</span>{% for identity in identities %}<span>linked</span><span>{{ identity }} ✓</span>{% endfor %}</div>
     {% endif %}
   </div>
   <div class="panel">

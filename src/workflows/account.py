@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from workflows.auth import LoggedInUser, is_admin
-from workflows.db import IrcLink, LedgerEntry, User
+from workflows.db import ExternalIdentity, LedgerEntry, User
 from workflows.ledger import grant_daily
 from workflows.state import AppServices, Db
 
@@ -21,7 +21,7 @@ class MeView(BaseModel):
     free_credits: int = Field(description="Daily free credits left today.")
     paid_credits: int = Field(description="Credits bought with beans.")
     admin: bool = Field(description="Whether the user is a workflows admin.")
-    irc_accounts: list[str] = Field(description="IRC accounts linked to this user.")
+    identities: list[str] = Field(description="External identities linked to this user.")
 
 
 class LedgerEntryView(BaseModel):
@@ -53,8 +53,8 @@ def get_or_create_user(session: Session, logto_sub: str, username: str) -> User:
     return user
 
 
-def irc_accounts(session: Session, user: User) -> list[str]:
-    query = select(IrcLink.irc_account).where(IrcLink.user_id == user.id)
+def linked_identities(session: Session, user: User) -> list[str]:
+    query = select(ExternalIdentity.identity).where(ExternalIdentity.user_id == user.id)
     return list(session.scalars(query))
 
 
@@ -77,7 +77,7 @@ async def get_me(user: LoggedInUser, session: Db, services: AppServices) -> MeVi
         free_credits=user.free_credits,
         paid_credits=user.paid_credits,
         admin=is_admin(user, services.settings),
-        irc_accounts=irc_accounts(session, user),
+        identities=linked_identities(session, user),
     )
 
 

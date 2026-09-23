@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from starlette.datastructures import FormData
 from starlette.responses import Response
 
-from workflows.account import irc_accounts, ledger_entries, topup_url
+from workflows.account import ledger_entries, linked_identities, topup_url
 from workflows.api import (
     QuoteRequest,
     get_job_or_404,
@@ -21,8 +21,8 @@ from workflows.api import (
     type_view,
 )
 from workflows.auth import CurrentUser, csrf_token, is_admin, verify_csrf
+from workflows.clients import templates
 from workflows.db import Job, JobStatus, JsonObject, User
-from workflows.irc import templates
 from workflows.jobs import announce, cancel, create_job, ensure_available
 from workflows.jobs import enqueue as enqueue_job
 from workflows.jobtypes import JobType
@@ -232,7 +232,7 @@ async def wallet_page(page: PageCtx) -> Response:
     if page.user is None:
         return login_redirect("/wallet")
     context = {
-        "irc_accounts": irc_accounts(page.session, page.user),
+        "identities": linked_identities(page.session, page.user),
         "ledger": ledger_entries(page.session, page.user),
         "reserved": _reserved_credits(page.session, page.user),
         "credits_per_bean": CREDITS_PER_BEAN,

@@ -27,7 +27,6 @@ class HowToOrderEntry(BaseModel):
     type: str = Field(description="Job type name.")
     available: bool = Field(description="Whether the job type accepts orders now.")
     web_url: str = Field(description="Web page to order this job type.")
-    irc_command: str = Field(description="IRC command form to order this job type.")
 
 
 def build_mcp(services: Services) -> FastMCP:
@@ -65,14 +64,13 @@ def build_mcp(services: Services) -> FastMCP:
 
     @mcp.tool
     def how_to_order() -> list[HowToOrderEntry]:
-        """Show how to order each job type on the web and on IRC."""
+        """Show the web order URL for each job type. Clients can also submit jobs via the API."""
         base_url = services.settings.base_url
         return [
             HowToOrderEntry(
                 type=job_type.name,
                 available=job_type.available,
                 web_url=f"{base_url}/order/{job_type.name}",
-                irc_command=f".wf {job_type.name} ...",
             )
             for job_type in services.registry.values()
         ]

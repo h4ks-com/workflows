@@ -30,7 +30,7 @@
       {% for slot in queue.queued %}
       <div class="q {{ 'me' if me and slot.owner == me.username else '' }}">
         <span class="pos">#{{ slot.position }}</span>
-        <span class="what"><b>{{ slot.owner or 'irc' }}</b> · {{ slot.type }}<small><a href="/jobs/{{ slot.id }}">job #{{ slot.id }}</a></small></span>
+        <span class="what"><b>{{ slot.owner or 'guest' }}</b> · {{ slot.type }}<small><a href="/jobs/{{ slot.id }}">job #{{ slot.id }}</a></small></span>
         <span class="tag {{ 'wait' if me and slot.owner == me.username else '' }}">{{ 'you' if me and slot.owner == me.username else 'queued' }}</span>
         <span class="num muted eta">~{{ (slot.starts_in_seconds // 60) if slot.starts_in_seconds is not none else '?' }} min</span>
       </div>

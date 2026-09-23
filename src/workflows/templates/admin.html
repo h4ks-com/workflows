@@ -38,10 +38,10 @@
   <span class="label">running + queued</span>
   <div class="queue">
     {% if queue.running %}
-    <div class="q"><span class="pos">run</span><span class="what"><b>{{ queue.running.owner or 'irc' }}</b> · {{ queue.running.type }}<small><a href="/jobs/{{ queue.running.id }}">job #{{ queue.running.id }}</a></small></span><span class="tag run">running</span><span></span></div>
+    <div class="q"><span class="pos">run</span><span class="what"><b>{{ queue.running.owner or 'guest' }}</b> · {{ queue.running.type }}<small><a href="/jobs/{{ queue.running.id }}">job #{{ queue.running.id }}</a></small></span><span class="tag run">running</span><span></span></div>
     {% endif %}
     {% for slot in queue.queued %}
-    <div class="q"><span class="pos">#{{ slot.position }}</span><span class="what"><b>{{ slot.owner or 'irc' }}</b> · {{ slot.type }}<small><a href="/jobs/{{ slot.id }}">job #{{ slot.id }}</a></small></span><span class="tag wait">queued</span><span></span></div>
+    <div class="q"><span class="pos">#{{ slot.position }}</span><span class="what"><b>{{ slot.owner or 'guest' }}</b> · {{ slot.type }}<small><a href="/jobs/{{ slot.id }}">job #{{ slot.id }}</a></small></span><span class="tag wait">queued</span><span></span></div>
     {% else %}
     {% if not queue.running %}<p class="muted">queue is empty.</p>{% endif %}
     {% endfor %}

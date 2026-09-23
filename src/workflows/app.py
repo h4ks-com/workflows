@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
-from workflows import account, admin, api, irc, stream, web
+from workflows import account, admin, api, clients, stream, web
 from workflows.beans import BeansPoller
 from workflows.bus import EventBus
 from workflows.db import connect, session_factory
@@ -19,7 +19,6 @@ from workflows.ledger import InsufficientCreditsError
 from workflows.login import build_oauth
 from workflows.login import router as login_router
 from workflows.mcp import build_mcp
-from workflows.notify import notify_channels
 from workflows.settings import Settings, load_settings
 from workflows.state import Services
 from workflows.worker import QueueWorker
@@ -57,8 +56,8 @@ async def healthz() -> dict[str, str]:
 def _register_routers(app: FastAPI) -> None:
     app.include_router(api.router)
     app.include_router(account.router)
-    app.include_router(irc.router)
-    app.include_router(irc.pages_router)
+    app.include_router(clients.router)
+    app.include_router(clients.pages_router)
     app.include_router(admin.router)
     app.include_router(login_router)
     app.include_router(stream.router)
@@ -95,8 +94,6 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
             tasks = [asyncio.create_task(worker.run())]
             if beans_poller is not None:
                 tasks.append(asyncio.create_task(beans_poller.run()))
-            if settings.cloudbot_url:
-                tasks.append(asyncio.create_task(notify_channels(services)))
             yield
             for task in tasks:
                 task.cancel()

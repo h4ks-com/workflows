@@ -67,11 +67,11 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
-class IrcLink(Base):
-    __tablename__ = "irc_links"
+class ExternalIdentity(Base):
+    __tablename__ = "external_identities"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    irc_account: Mapped[str] = mapped_column(unique=True)
+    identity: Mapped[str] = mapped_column(unique=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
@@ -82,8 +82,7 @@ class LinkRequest(Base):
     __tablename__ = "link_requests"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    irc_account: Mapped[str]
-    nick: Mapped[str]
+    identity: Mapped[str]
     token_hash: Mapped[str] = mapped_column(unique=True)
     used: Mapped[bool] = mapped_column(default=False)
     expires_at: Mapped[datetime]
@@ -102,9 +101,7 @@ class Job(Base):
     estimate_seconds: Mapped[int]
     reserved_free: Mapped[int] = mapped_column(default=0)
     reserved_paid: Mapped[int] = mapped_column(default=0)
-    irc_account: Mapped[str | None]
-    nick: Mapped[str | None]
-    channel: Mapped[str | None]
+    identity: Mapped[str | None]
     progress_step: Mapped[str | None]
     progress_done: Mapped[int | None]
     progress_total: Mapped[int | None]

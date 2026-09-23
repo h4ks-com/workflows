@@ -29,8 +29,6 @@ class Settings:
     logto_app_secret: str = ""
     beans_url: str = DEFAULT_BEANS_URL
     beans_token: str = ""
-    cloudbot_url: str = ""
-    cloudbot_token: str = ""
     dev_login: bool = False
 
     def __post_init__(self) -> None:
@@ -71,7 +69,5 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
         logto_app_secret=environ.get("LOGTO_APP_SECRET", ""),
         beans_url=environ.get("BEANS_URL", DEFAULT_BEANS_URL).rstrip("/"),
         beans_token=environ.get("BEANS_TOKEN", ""),
-        cloudbot_url=environ.get("CLOUDBOT_URL", "").rstrip("/"),
-        cloudbot_token=environ.get("CLOUDBOT_TOKEN", ""),
         dev_login=environ.get("DEV_LOGIN", "").strip().lower() == "true",
     )

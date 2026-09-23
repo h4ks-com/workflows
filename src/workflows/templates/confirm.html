@@ -9,8 +9,8 @@
   <div class="kv"><span>price</span><span>{{ job.quote }} credits</span></div>
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    {% if job.irc_account %}
-    <label class="row" style="font:13px var(--mono);color:var(--mid)"><input type="checkbox" name="link_account" value="true" style="width:auto" checked> link IRC account {{ job.irc_account }} to me</label>
+    {% if job.identity %}
+    <label class="row" style="font:13px var(--mono);color:var(--mid)"><input type="checkbox" name="link_account" value="true" style="width:auto" checked> link {{ job.identity }} to your account</label>
     {% endif %}
     <button type="submit" class="btn">confirm and pay</button>
   </form>

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from conftest import log_in, make_user
 from workflows.account import get_or_create_user
-from workflows.db import IrcLink
+from workflows.db import ExternalIdentity
 
 
 def test_get_or_create_user_creates_then_syncs_username(session: Session) -> None:
@@ -16,11 +16,11 @@ def test_get_or_create_user_creates_then_syncs_username(session: Session) -> Non
     assert fetched.username == "alice2"
 
 
-def test_me_grants_daily_credits_and_lists_irc_accounts(
+def test_me_grants_daily_credits_and_lists_linked_identities(
     client: TestClient, session: Session
 ) -> None:
     user = make_user(session, "alice", paid_credits=50)
-    session.add(IrcLink(irc_account="alice_irc", user_id=user.id))
+    session.add(ExternalIdentity(identity="irc:alice", user_id=user.id))
     session.commit()
     log_in(client, user)
 
@@ -31,7 +31,7 @@ def test_me_grants_daily_credits_and_lists_irc_accounts(
         "free_credits": 500,
         "paid_credits": 50,
         "admin": False,
-        "irc_accounts": ["alice_irc"],
+        "identities": ["irc:alice"],
     }
 
 
