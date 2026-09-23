@@ -6,17 +6,19 @@ from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import Headers
 from starlette.middleware.sessions import SessionMiddleware
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from workflows import account, admin, api, clients, stream, web
 from workflows.beans import BeansPoller
 from workflows.bus import EventBus
 from workflows.db import connect, session_factory
 from workflows.jobs import InvalidEventError, JobError
-from workflows.jobtypes import ProbeError, Prober, YtdlProber, build_registry
+from workflows.jobtypes import PROBE_LIMITS, ProbeError, Prober, YtdlProber, build_registry
 from workflows.ledger import InsufficientCreditsError
 from workflows.login import build_oauth
 from workflows.login import router as login_router
@@ -34,11 +36,20 @@ ERROR_STATUS = {
     ProbeError: 502,
 }
 STATIC_DIR = Path(__file__).parent / "static"
-CSP = (
-    "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-    "font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; "
-    "img-src 'self' data:"
-)
+MAX_BODY_BYTES = 256 * 1024
+TOO_LARGE = "the request body is over 256 KB"
+SECURITY_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; "
+        "img-src 'self' data:; media-src 'self' https://s3-api.t3ks.com; "
+        "frame-ancestors 'none'; base-uri 'none'; form-action 'self' https://beans.h4ks.com"
+    ),
+    "Strict-Transport-Security": "max-age=31536000",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "same-origin",
+    "X-Frame-Options": "DENY",
+}
 
 
 async def _domain_error(request: Request, error: Exception) -> JSONResponse:
@@ -49,8 +60,37 @@ async def _security_headers(
     request: Request, call_next: Callable[[Request], Awaitable[Response]]
 ) -> Response:
     response = await call_next(request)
-    response.headers["Content-Security-Policy"] = CSP
+    response.headers.update(SECURITY_HEADERS)
     return response
+
+
+class BodyLimit:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        declared = Headers(scope=scope).get("content-length", "")
+        if declared.isdigit() and int(declared) > MAX_BODY_BYTES:
+            await _too_large()(scope, receive, send)
+            return
+        received = 0
+
+        async def counted_receive() -> Message:
+            nonlocal received
+            message = await receive()
+            received += len(message.get("body", b""))
+            if received > MAX_BODY_BYTES:
+                raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, TOO_LARGE)
+            return message
+
+        await self.app(scope, counted_receive, send)
+
+
+def _too_large() -> JSONResponse:
+    return JSONResponse({"detail": TOO_LARGE}, status_code=status.HTTP_413_CONTENT_TOO_LARGE)
 
 
 async def healthz(services: AppServices) -> JSONResponse:
@@ -80,6 +120,7 @@ def _register_routers(app: FastAPI) -> None:
 def create_app(settings: Settings | None = None, prober: Prober | None = None) -> FastAPI:
     settings = settings or load_settings()
     http = httpx.AsyncClient()
+    probe_http = httpx.AsyncClient(limits=PROBE_LIMITS)
     engine = connect(settings.database_url)
     sessions = session_factory(engine)
     registry = build_registry(settings.executor_urls)
@@ -91,7 +132,7 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
         sessions=sessions,
         registry=registry,
         bus=bus,
-        prober=prober or YtdlProber(http, settings.ytdl_url, settings.ytdl_api_key),
+        prober=prober or YtdlProber(probe_http, settings.ytdl_url, settings.ytdl_api_key),
         worker=worker,
         http=http,
         oauth=build_oauth(settings),
@@ -116,11 +157,13 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
                 with suppress(asyncio.CancelledError):
                     await task
             await http.aclose()
+            await probe_http.aclose()
             engine.dispose()
 
     app = FastAPI(title="h4ks workflows", lifespan=lifespan)
     app.state.services = services
     app.state.mcp = mcp
+    app.add_middleware(BodyLimit)
     app.middleware("http")(_security_headers)
     app.add_middleware(
         SessionMiddleware,

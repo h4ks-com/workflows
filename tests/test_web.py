@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from conftest import FakeProber, log_in, make_job, make_user, queue_job
+from workflows.db import ExternalIdentity
 from workflows.jobs import LogEvent, StepEvent, apply_event, start, succeed
 from workflows.state import Services
 
@@ -314,3 +316,21 @@ def test_user_page_shows_job_history(
 
 def test_user_page_unknown_user_is_404(client: TestClient) -> None:
     assert client.get("/u/nobody").status_code == 404
+
+
+def test_wallet_unlinks_an_identity(client: TestClient, session: Session) -> None:
+    user = make_user(session, "alice")
+    session.add(ExternalIdentity(identity="irc:alice", user_id=user.id))
+    session.commit()
+    log_in(client, user)
+    page = client.get("/wallet")
+    assert "irc:alice" in page.text
+
+    response = client.post(
+        "/wallet/unlink",
+        data={"csrf_token": csrf_from(page.text), "identity": "irc:alice"},
+        follow_redirects=False,
+    )
+
+    assert response.headers["location"] == "/wallet"
+    assert session.scalar(select(ExternalIdentity)) is None

@@ -5,13 +5,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from workflows.api import JobView, get_job_or_404, job_view
-from workflows.auth import require_admin
+from workflows.auth import require_admin, require_fetch_header
 from workflows.db import User
 from workflows.jobs import announce, cancel, job_type_for
 from workflows.ledger import adjust
 from workflows.state import AppServices, Db
 
-router = APIRouter(prefix="/api/admin", dependencies=[Depends(require_admin)])
+router = APIRouter(
+    prefix="/api/admin", dependencies=[Depends(require_fetch_header), Depends(require_admin)]
+)
 
 
 class AdjustCreditsRequest(BaseModel):

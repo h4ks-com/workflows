@@ -1,11 +1,11 @@
 from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from workflows.auth import LoggedInUser, is_admin
+from workflows.auth import LoggedInUser, is_admin, require_fetch_header
 from workflows.db import ExternalIdentity, LedgerEntry, User
 from workflows.ledger import grant_daily
 from workflows.state import AppServices, Db
@@ -13,7 +13,7 @@ from workflows.state import AppServices, Db
 MAX_TOPUP_BEANS = 1000
 LEDGER_LIMIT = 100
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", dependencies=[Depends(require_fetch_header)])
 
 
 class MeView(BaseModel):
@@ -58,6 +58,18 @@ def linked_identities(session: Session, user: User) -> list[str]:
     return list(session.scalars(query))
 
 
+def unlink_identity(session: Session, user: User, identity: str) -> None:
+    link = session.scalar(
+        select(ExternalIdentity).where(
+            ExternalIdentity.identity == identity, ExternalIdentity.user_id == user.id
+        )
+    )
+    if link is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"{identity} is not linked to you")
+    session.delete(link)
+    session.commit()
+
+
 def ledger_entries(session: Session, user: User, limit: int = LEDGER_LIMIT) -> list[LedgerEntry]:
     query = (
         select(LedgerEntry)
@@ -79,6 +91,11 @@ async def get_me(user: LoggedInUser, session: Db, services: AppServices) -> MeVi
         admin=is_admin(user, services.settings),
         identities=linked_identities(session, user),
     )
+
+
+@router.delete("/me/identities/{identity}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_identity(identity: str, user: LoggedInUser, session: Db) -> None:
+    unlink_identity(session, user, identity)
 
 
 @router.get("/me/ledger")

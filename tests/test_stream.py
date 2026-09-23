@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from sqlalchemy.orm import Session
 
 from conftest import make_user, queue_job
+from workflows.api import QueueView, queue_view
 from workflows.bus import QUEUE_TOPIC, BusEvent, job_topic
 from workflows.db import JobStatus
 from workflows.jobs import start
@@ -112,3 +113,24 @@ async def test_queue_events_generator_coalesces_a_burst_into_one_update(
 
     with pytest.raises(TimeoutError):
         await asyncio.wait_for(events.__anext__(), timeout=0.1)
+
+
+async def test_queue_subscribers_share_one_snapshot_per_change(
+    services: Services, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    views: list[int] = []
+
+    def counted_queue_view(session: Session, services: Services) -> QueueView:
+        views.append(1)
+        return queue_view(session, services)
+
+    monkeypatch.setattr("workflows.stream.queue_view", counted_queue_view)
+    first, second = _queue_events(services), _queue_events(services)
+    await first.__anext__()
+    await second.__anext__()
+
+    services.bus.publish(QUEUE_TOPIC, BusEvent("status", {"job_id": 1, "status": "queued"}))
+    await first.__anext__()
+    await second.__anext__()
+
+    assert len(views) == 3

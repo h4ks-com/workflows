@@ -114,7 +114,7 @@ def test_get_identity(client: TestClient, session: Session) -> None:
 
     response = client.get("/api/clients/identities/irc:al", headers=SERVICE_HEADERS)
 
-    assert response.json() == {"username": "alice", "free_credits": 0, "paid_credits": 20}
+    assert response.json() == {"username": "alice", "free_credits": 500, "paid_credits": 20}
 
 
 def test_confirm_page_redirects_anonymous_users_to_login(client: TestClient) -> None:
@@ -142,6 +142,9 @@ def test_confirm_flow_enqueues_and_links(client: TestClient, session: Session) -
 
     page = client.get(f"/confirm/{token}")
     assert page.status_code == 200
+    assert "<b>irc:al</b>" in page.text
+    assert "cats" in page.text
+    assert 'name="link_account" value="true" style="width:auto">' in page.text
     csrf = page.text.split('name="csrf_token" value="')[1].split('"')[0]
 
     response = client.post(
@@ -236,3 +239,43 @@ async def test_expired_awaiting_confirmation_jobs_are_cancelled(
 
     session.expire_all()
     assert stale_job.status == JobStatus.CANCELLED
+
+
+def test_confirm_refuses_to_move_an_identity_linked_elsewhere(
+    client: TestClient, session: Session
+) -> None:
+    owner = make_user(session, "alice")
+    session.add(ExternalIdentity(identity="irc:al", user_id=owner.id))
+    session.commit()
+    submit = client.post(
+        "/api/clients/jobs", json={**SUBMIT, "identity": "irc:new"}, headers=SERVICE_HEADERS
+    )
+    job = session.get_one(Job, submit.json()["job"]["id"])
+    job.identity = "irc:al"
+    session.commit()
+    token = submit.json()["confirm_url"].rsplit("/", 1)[-1]
+    log_in(client, make_user(session, "mallory"))
+    csrf = client.get(f"/confirm/{token}").text.split('name="csrf_token" value="')[1].split('"')[0]
+
+    response = client.post(f"/confirm/{token}", data={"csrf_token": csrf, "link_account": "true"})
+
+    assert response.status_code == 409
+    session.expire_all()
+    link = session.scalar(select(ExternalIdentity).where(ExternalIdentity.identity == "irc:al"))
+    assert link is not None
+    assert link.user_id == owner.id
+    assert job.status == JobStatus.AWAITING_CONFIRMATION
+
+
+def test_link_refuses_an_identity_linked_elsewhere(client: TestClient, session: Session) -> None:
+    owner = make_user(session, "alice")
+    session.add(ExternalIdentity(identity="irc:al", user_id=owner.id))
+    session.commit()
+    link_url = client.post(
+        "/api/clients/links", json={"identity": "irc:al"}, headers=SERVICE_HEADERS
+    ).json()["link_url"]
+    token = link_url.rsplit("/", 1)[-1]
+    log_in(client, make_user(session, "mallory"))
+    csrf = client.get(f"/link/{token}").text.split('name="csrf_token" value="')[1].split('"')[0]
+
+    assert client.post(f"/link/{token}", data={"csrf_token": csrf}).status_code == 409

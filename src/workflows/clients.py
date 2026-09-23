@@ -23,7 +23,7 @@ from workflows.jobs import (
     job_type_for,
 )
 from workflows.jobtypes import JobType, quote
-from workflows.ledger import InsufficientCreditsError
+from workflows.ledger import InsufficientCreditsError, grant_daily
 from workflows.state import AppServices, Db, Services
 from workflows.webviews import is_playable_url, me_chip
 
@@ -80,7 +80,7 @@ def _link_identity(session: Session, identity: str, user: User) -> None:
     if existing is None:
         session.add(ExternalIdentity(identity=identity, user_id=user.id))
     elif existing.user_id != user.id:
-        existing.user_id = user.id
+        raise HTTPException(status.HTTP_409_CONFLICT, f"{identity} is linked to another account")
 
 
 def _submit_for_linked_user(
@@ -150,6 +150,8 @@ async def get_identity(identity: str, session: Db) -> IdentityView:
     user = _linked_user(session, identity)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"no user linked to {identity}")
+    grant_daily(session, user)
+    session.commit()
     return IdentityView(
         username=user.username, free_credits=user.free_credits, paid_credits=user.paid_credits
     )
@@ -208,13 +210,13 @@ async def confirm_submit(
         )
     verify_csrf(request, csrf_token_field)
     job = _job_by_confirm_token(session, token)
+    if link_account and job.identity:
+        _link_identity(session, job.identity, user)
     try:
         enqueue(session, job, user)
     except InsufficientCreditsError as error:
         raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, str(error)) from error
     job.confirm_token_hash = None
-    if link_account and job.identity:
-        _link_identity(session, job.identity, user)
     session.commit()
     announce(services.bus, job)
     return RedirectResponse(f"/jobs/{job.id}", status_code=status.HTTP_303_SEE_OTHER)

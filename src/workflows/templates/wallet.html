@@ -24,7 +24,14 @@
     </form>
     {% if identities %}
     <span class="label">linked accounts</span>
-    <div class="kv"><span>logto</span><span>{{ me.username }}</span>{% for identity in identities %}<span>linked</span><span>{{ identity }} ✓</span>{% endfor %}</div>
+    <div class="kv"><span>logto</span><span>{{ me.username }}</span></div>
+    {% for identity in identities %}
+    <form method="post" action="/wallet/unlink" class="row">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="identity" value="{{ identity }}">
+      <span>{{ identity }} ✓</span><button type="submit" class="btn ghost">unlink</button>
+    </form>
+    {% endfor %}
     {% endif %}
   </div>
   <div class="panel">

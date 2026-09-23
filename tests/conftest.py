@@ -27,6 +27,7 @@ BASE_URL = "https://workflows.example"
 PARODY_EXECUTOR = "https://n8n.example/webhook/parody"
 SONG_EXECUTOR = "https://n8n.example/webhook/song"
 SONG_URL = "https://youtube.example/watch?v=song"
+FETCH_HEADERS = {"X-Requested-With": "fetch"}
 
 
 class FakeProber:
@@ -81,7 +82,7 @@ def session(services: Services) -> Iterator[Session]:
 
 @pytest.fixture
 def client(app: FastAPI) -> TestClient:
-    return TestClient(app, base_url="https://testserver")
+    return TestClient(app, base_url="https://testserver", headers=FETCH_HEADERS)
 
 
 def make_user(session: Session, username: str, paid_credits: int = 0) -> User:

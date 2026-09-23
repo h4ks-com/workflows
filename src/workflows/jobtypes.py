@@ -1,13 +1,25 @@
+import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import Literal, Protocol
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError
 
 PROBE_TIMEOUT_SECONDS = 60.0
+PROBE_CONCURRENCY = 4
+PROBE_LIMITS = httpx.Limits(max_connections=PROBE_CONCURRENCY, max_keepalive_connections=2)
+MAX_MEDIA_SECONDS = 3600
 YTDL_API_KEY_HEADER = "x-api-key"
+SHORT_TEXT = 200
+MEDIUM_TEXT = 500
+LONG_TEXT = 2000
+LYRICS_TEXT = 6000
+
+
+class ProbeError(Exception):
+    pass
 
 
 @dataclass(frozen=True)
@@ -15,9 +27,16 @@ class Probe:
     duration_seconds: float
     title: str
 
+    def __post_init__(self) -> None:
+        if not 0 < self.duration_seconds <= MAX_MEDIA_SECONDS:
+            raise ProbeError(
+                f"the media must be between 0 and {MAX_MEDIA_SECONDS // 60} minutes long"
+            )
 
-class ProbeError(Exception):
-    pass
+
+class ProbeInfo(BaseModel):
+    duration: float
+    title: str | None = None
 
 
 class Prober(Protocol):
@@ -29,8 +48,14 @@ class YtdlProber:
         self._http = http
         self._base_url = base_url
         self._api_key = api_key
+        self._slots = asyncio.Semaphore(PROBE_CONCURRENCY)
 
     async def info(self, url: str) -> Probe:
+        async with self._slots:
+            info = await self._fetch(url)
+        return Probe(info.duration, info.title or "")
+
+    async def _fetch(self, url: str) -> ProbeInfo:
         try:
             response = await self._http.post(
                 f"{self._base_url}/v1/info",
@@ -39,14 +64,9 @@ class YtdlProber:
                 timeout=PROBE_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
-            body = response.json()
-        except (httpx.HTTPError, ValueError) as error:
+            return ProbeInfo.model_validate_json(response.content)
+        except (httpx.HTTPError, ValidationError) as error:
             raise ProbeError(f"could not read {url}") from error
-        duration = body.get("duration")
-        if not isinstance(duration, int | float):
-            raise ProbeError(f"could not find the duration of {url}")
-        title = body.get("title")
-        return Probe(float(duration), title if isinstance(title, str) else "")
 
 
 def media_seconds(probe: Probe | None) -> float:
@@ -71,16 +91,20 @@ class JobParams(BaseModel, ABC):
 class ParodyParams(JobParams):
     url: HttpUrl = Field(description="Song to parody: YouTube, SoundCloud or a direct audio URL.")
     lyrics: str | None = Field(
-        None, description="Original lyrics. Fetched from lrclib when omitted."
+        None,
+        max_length=LYRICS_TEXT,
+        description="Original lyrics. Fetched from lrclib when omitted.",
     )
     parody_lyrics: str | None = Field(
-        None, description="Finished parody lyrics. Written from the idea when omitted."
+        None,
+        max_length=LYRICS_TEXT,
+        description="Finished parody lyrics. Written from the idea when omitted.",
     )
-    idea: str | None = Field(None, description="What the parody is about.")
+    idea: str | None = Field(None, max_length=LONG_TEXT, description="What the parody is about.")
     amount: Literal["a few words", "most lines", "every line"] = Field(
         "most lines", description="How much of the original lyrics to change."
     )
-    title: str | None = Field(None, description="Title for the result.")
+    title: str | None = Field(None, max_length=SHORT_TEXT, description="Title for the result.")
     radio: bool = Field(False, description="Also play the result on h4ks radio.")
 
     def media_url(self) -> str:
@@ -91,11 +115,15 @@ class ParodyParams(JobParams):
 
 
 class SongParams(JobParams):
-    prompt: str = Field(min_length=1, description="What the song is about.")
+    prompt: str = Field(min_length=1, max_length=LONG_TEXT, description="What the song is about.")
     lyrics: str | None = Field(
-        None, description="Lyrics to sing. Written from the prompt when omitted."
+        None,
+        max_length=LYRICS_TEXT,
+        description="Lyrics to sing. Written from the prompt when omitted.",
     )
-    style: str | None = Field(None, description="Musical style, genre or mood.")
+    style: str | None = Field(
+        None, max_length=MEDIUM_TEXT, description="Musical style, genre or mood."
+    )
     seconds: int = Field(150, ge=60, le=240, description="Song length in seconds.")
     model: Literal["ace-step", "minimax"] = Field("ace-step", description="Music model.")
 
@@ -118,9 +146,11 @@ class VoiceParams(JobParams):
 
 
 class PodcastParams(JobParams):
-    prompt: str = Field(min_length=1, description="Topic of the episode.")
+    prompt: str = Field(min_length=1, max_length=LONG_TEXT, description="Topic of the episode.")
     minutes: int = Field(6, ge=2, le=15, description="Episode length in minutes.")
-    bed_style: str | None = Field(None, description="Style of the background music bed.")
+    bed_style: str | None = Field(
+        None, max_length=MEDIUM_TEXT, description="Style of the background music bed."
+    )
 
     def quote(self, probe: Probe | None) -> int:
         return round(90 * self.minutes + 120)

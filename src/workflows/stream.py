@@ -38,17 +38,17 @@ async def _job_events(job_id: int, services: Services) -> AsyncIterator[ServerSe
 
 
 async def _queue_events(services: Services) -> AsyncIterator[ServerSentEvent]:
-    def snapshot() -> ServerSentEvent:
+    def build() -> JsonObject:
         with services.sessions() as session:
-            return _event("queue", queue_view(session, services).model_dump(mode="json"))
+            return queue_view(session, services).model_dump(mode="json")
 
     with services.bus.subscribe(QUEUE_TOPIC) as queue:
-        yield snapshot()
+        yield _event("queue", build())
         while True:
             await queue.get()
             while not queue.empty():
                 queue.get_nowait()
-            yield snapshot()
+            yield _event("queue", services.bus.snapshot(QUEUE_TOPIC, build))
 
 
 @router.get("/jobs/{job_id}/stream")

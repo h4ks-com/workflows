@@ -33,7 +33,9 @@ def build_oauth(settings: Settings) -> OAuth | None:
 
 
 def safe_next(candidate: str | None) -> str:
-    if not candidate or not candidate.startswith("/"):
+    if not candidate or not candidate.startswith("/") or candidate.startswith("//"):
+        return DEFAULT_NEXT
+    if "\\" in candidate:
         return DEFAULT_NEXT
     parsed = urlsplit(candidate)
     return candidate if not parsed.scheme and not parsed.netloc else DEFAULT_NEXT
@@ -42,8 +44,13 @@ def safe_next(candidate: str | None) -> str:
 def _dev_login(request: Request, session: Db, username: str, next_path: str) -> RedirectResponse:
     user = get_or_create_user(session, logto_sub=f"dev:{username}", username=username)
     session.commit()
-    request.session[SESSION_USER_KEY] = user.id
+    start_session(request, user.id)
     return RedirectResponse(next_path)
+
+
+def start_session(request: Request, user_id: int) -> None:
+    request.session.clear()
+    request.session[SESSION_USER_KEY] = user_id
 
 
 @router.get("/login")
@@ -77,8 +84,8 @@ async def auth_callback(request: Request, services: AppServices, session: Db) ->
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "logto did not return a username")
     user = get_or_create_user(session, logto_sub=sub, username=username)
     session.commit()
-    request.session[SESSION_USER_KEY] = user.id
-    next_path = request.session.pop(NEXT_SESSION_KEY, DEFAULT_NEXT)
+    next_path = request.session.get(NEXT_SESSION_KEY, DEFAULT_NEXT)
+    start_session(request, user.id)
     return RedirectResponse(next_path)
 
 

@@ -68,3 +68,14 @@ def test_topup_rejects_out_of_range_amounts(client: TestClient, session: Session
     log_in(client, make_user(session, "alice"))
 
     assert client.post("/api/topups", json={"beans": 0}).status_code == 422
+
+
+def test_unlink_identity(client: TestClient, session: Session) -> None:
+    user = make_user(session, "alice")
+    session.add(ExternalIdentity(identity="irc:alice", user_id=user.id))
+    session.commit()
+    log_in(client, user)
+
+    assert client.delete("/api/me/identities/irc:alice").status_code == 204
+    assert client.delete("/api/me/identities/irc:alice").status_code == 404
+    assert client.get("/api/me").json()["identities"] == []

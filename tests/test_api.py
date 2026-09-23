@@ -1,5 +1,6 @@
 import asyncio
 import signal
+from collections.abc import Iterator
 from datetime import timedelta
 
 import pytest
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 from starlette.requests import Request
 
 from conftest import (
+    FETCH_HEADERS,
     SERVICE_TOKEN,
     SONG_URL,
     FakeProber,
@@ -137,17 +139,62 @@ def test_submit_fails_without_enough_credits(
     assert response.json()["detail"] == "this needs 600 credits and you have 500"
 
 
-@pytest.mark.parametrize(("on_behalf_of", "status"), [("alice", 201), (None, 422), ("nobody", 404)])
-def test_service_submits_on_behalf_of_a_user(
-    client: TestClient, session: Session, on_behalf_of: str | None, status: int
-) -> None:
+def test_the_service_token_cannot_submit_for_a_user(client: TestClient, session: Session) -> None:
     make_user(session, "alice")
 
     response = client.post(
-        "/api/jobs", json={**SONG, "on_behalf_of": on_behalf_of}, headers=SERVICE_HEADERS
+        "/api/jobs", json={**SONG, "on_behalf_of": "alice"}, headers=SERVICE_HEADERS
     )
 
-    assert response.status_code == status
+    assert response.status_code == 401
+
+
+def test_session_posts_need_the_fetch_header(
+    app: FastAPI, session: Session, services: Services
+) -> None:
+    user = make_user(session, "alice")
+    job = queue_job(session, services, user)
+    client = TestClient(app, base_url="https://testserver")
+
+    assert client.post("/api/quote", json=SONG).status_code == 200
+    log_in(client, user)
+    assert client.post(f"/api/jobs/{job.id}/cancel").status_code == 403
+    assert client.post("/api/topups", json={"beans": 5}).status_code == 403
+    assert client.post("/api/admin/queue/pause").status_code == 403
+    assert client.post("/api/quote", json=SONG, headers=SERVICE_HEADERS).status_code == 200
+    assert client.post(f"/api/jobs/{job.id}/cancel", headers=FETCH_HEADERS).status_code == 200
+
+
+def test_responses_carry_security_headers(client: TestClient) -> None:
+    headers = client.get("/api/types").headers
+
+    assert "frame-ancestors 'none'" in headers["content-security-policy"]
+    assert "form-action 'self' https://beans.h4ks.com" in headers["content-security-policy"]
+    assert headers["strict-transport-security"] == "max-age=31536000"
+    assert headers["x-content-type-options"] == "nosniff"
+    assert headers["referrer-policy"] == "same-origin"
+    assert headers["x-frame-options"] == "DENY"
+
+
+def test_large_bodies_are_refused(client: TestClient) -> None:
+    oversized = b"x" * (256 * 1024 + 1)
+
+    def chunks() -> Iterator[bytes]:
+        yield oversized[:1024]
+        yield oversized[1024:]
+
+    declared = client.post("/api/quote", content=oversized)
+    streamed = client.post(
+        "/api/quote", content=chunks(), headers={"Content-Type": "application/json"}
+    )
+
+    assert (declared.status_code, streamed.status_code) == (413, 413)
+
+
+def test_long_params_are_refused(client: TestClient) -> None:
+    response = client.post("/api/quote", json={"type": "song", "params": {"prompt": "x" * 2001}})
+
+    assert response.status_code == 422
 
 
 def test_queue_orders_jobs_with_etas(

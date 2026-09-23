@@ -11,6 +11,9 @@ from workflows.state import AppServices, Db
 SESSION_USER_KEY = "user_id"
 CSRF_SESSION_KEY = "csrf_token"
 BEARER_PREFIX = "Bearer "
+FETCH_HEADER = "x-requested-with"
+FETCH_HEADER_VALUE = "fetch"
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 def bearer_token(request: Request) -> str | None:
@@ -55,6 +58,15 @@ async def require_admin(user: LoggedInUser, services: AppServices) -> User:
 async def require_service(request: Request, services: AppServices) -> None:
     if not is_service(request, services.settings):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "service token required")
+
+
+async def require_fetch_header(request: Request) -> None:
+    if request.method in SAFE_METHODS or bearer_token(request) is not None:
+        return
+    if SESSION_USER_KEY not in request.session:
+        return
+    if request.headers.get(FETCH_HEADER) != FETCH_HEADER_VALUE:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "send the X-Requested-With: fetch header")
 
 
 def csrf_token(request: Request) -> str:

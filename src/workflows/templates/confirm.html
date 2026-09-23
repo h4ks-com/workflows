@@ -6,11 +6,15 @@
   <span class="label">confirm your job</span>
   <h1>~/{{ job_type.name }}</h1>
   <p class="muted">{{ job_type.description }}</p>
-  <div class="kv"><span>price</span><span>{{ job.quote }} credits</span></div>
+  {% if job.identity %}<div class="notice warn">requested by <b>{{ job.identity }}</b>. confirm only if you asked for this job.</div>{% endif %}
+  <div class="kv">
+    {% for name, value in job.params.items() %}<span>{{ name }}</span><span>{{ value }}</span>{% endfor %}
+    <span class="total">price</span><span class="total">{{ job.quote }} credits</span>
+  </div>
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     {% if job.identity %}
-    <label class="row" style="font:13px var(--mono);color:var(--mid)"><input type="checkbox" name="link_account" value="true" style="width:auto" checked> link {{ job.identity }} to your account</label>
+    <label class="row" style="font:13px var(--mono);color:var(--mid)"><input type="checkbox" name="link_account" value="true" style="width:auto"> link {{ job.identity }} to your account to skip this page next time</label>
     {% endif %}
     <button type="submit" class="btn">confirm and pay</button>
   </form>

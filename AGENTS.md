@@ -60,6 +60,7 @@ h4ks workflows is a storefront and queue for workflows that run elsewhere. It se
 - Executor contract: accept the dispatch with a 2xx and send the first `step` event right away. A 4xx/5xx answer or a refused connection fails the job and refunds it. A dispatch timeout leaves the job running, and a job with no event within `FIRST_EVENT_TIMEOUT` seconds fails and is refunded. Executors retry callbacks: a repeated `result` after success or `error` after failure gets 204, any other event after the job ended gets 409, which includes every callback for a cancelled job.
 - Lifecycle changes publish on the event bus after the commit, for live views.
 - The queue pause flag lives in memory, so a restart resumes the queue.
+- Logged-in browser calls that change state under `/api` send `X-Requested-With: fetch`; requests with a bearer token are exempt. Request bodies are capped at 256 KB.
 - Prose (docs, commits): declarative, terse, no em dashes.
 
 ## Hygiene

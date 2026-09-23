@@ -1,12 +1,12 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Body, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from workflows.auth import CurrentUser, LoggedInUser, bearer_token, is_admin, is_service
+from workflows.auth import LoggedInUser, bearer_token, is_admin, require_fetch_header
 from workflows.bus import BusEvent, job_topic
 from workflows.db import Job, JobStatus, JsonObject, User
 from workflows.eta import Estimator, QueueSlot, progress_fraction
@@ -29,7 +29,7 @@ from workflows.state import AppServices, Db, Services
 DEFAULT_JOB_LIMIT = 20
 MAX_JOB_LIMIT = 100
 
-router = APIRouter(prefix="/api")
+router = APIRouter(prefix="/api", dependencies=[Depends(require_fetch_header)])
 
 
 class StepView(BaseModel):
@@ -50,12 +50,6 @@ class JobTypeView(BaseModel):
 class QuoteRequest(BaseModel):
     type: str = Field(description="Job type name.")
     params: JsonObject = Field(default_factory=dict, description="Job parameters.")
-
-
-class SubmitRequest(QuoteRequest):
-    on_behalf_of: str | None = Field(
-        None, description="Username that owns the job. Only valid with the service token."
-    )
 
 
 class ProbeView(BaseModel):
@@ -222,27 +216,6 @@ def job_detail_view(session: Session, services: Services, job_id: int) -> JobDet
     return JobDetailView(**view.model_dump(), events=events)
 
 
-def _user_named(session: Db, username: str | None) -> User:
-    if username is None:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "on_behalf_of is required with the service token"
-        )
-    user = session.scalar(select(User).where(User.username == username))
-    if user is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"no user named {username}")
-    return user
-
-
-def _submitter(
-    request: Request, services: Services, session: Db, user: User | None, body: SubmitRequest
-) -> User:
-    if is_service(request, services.settings):
-        return _user_named(session, body.on_behalf_of)
-    if user is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "log in first")
-    return user
-
-
 def _ensure_can_cancel(job: Job, user: User, services: Services) -> None:
     if is_admin(user, services.settings):
         return
@@ -291,12 +264,11 @@ async def get_job(job_id: int, session: Db, services: AppServices) -> JobDetailV
 
 @router.post("/jobs", status_code=status.HTTP_201_CREATED)
 async def submit_job(
-    body: SubmitRequest, request: Request, user: CurrentUser, session: Db, services: AppServices
+    body: QuoteRequest, user: LoggedInUser, session: Db, services: AppServices
 ) -> JobView:
-    owner = _submitter(request, services, session, user, body)
     job_type, params, priced = await price_request(services, body)
-    job = create_job(session, job_type, params, priced, owner)
-    enqueue(session, job, owner)
+    job = create_job(session, job_type, params, priced, user)
+    enqueue(session, job, user)
     session.commit()
     announce(services.bus, job)
     return job_view(job, job_type, Estimator(session, services.registry).slot(job))

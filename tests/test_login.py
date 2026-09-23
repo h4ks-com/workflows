@@ -1,3 +1,5 @@
+import json
+from base64 import b64decode, b64encode
 from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -5,13 +7,15 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from itsdangerous import TimestampSigner
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.responses import RedirectResponse
 
 from conftest import SESSION_SECRET, FakeProber, log_in, make_user
 from workflows.app import create_app
-from workflows.db import User
+from workflows.db import JsonObject, User
+from workflows.login import safe_next
 from workflows.settings import Settings
 from workflows.state import Services
 
@@ -169,3 +173,51 @@ def test_dev_bypass_needs_the_as_query_param(tmp_path: Path) -> None:
 
     assert response.headers["location"] == "/"
     app.state.services.sessions.kw["bind"].dispose()
+
+
+def session_data(cookie: str) -> JsonObject:
+    payload = TimestampSigner(SESSION_SECRET).unsign(cookie.encode())
+    data: JsonObject = json.loads(b64decode(payload))
+    return data
+
+
+def test_login_starts_a_fresh_session(dev_client: TestClient) -> None:
+    data = b64encode(json.dumps({"csrf_token": "planted", "user_id": 999}).encode())
+    dev_client.cookies.set("session", TimestampSigner(SESSION_SECRET).sign(data).decode())
+
+    response = dev_client.get("/login?as=alice", follow_redirects=False)
+
+    assert list(session_data(response.cookies["session"])) == ["user_id"]
+
+
+def test_logto_callback_starts_a_fresh_session(
+    logto_client: TestClient, logto_app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    services: Services = logto_app.state.services
+    assert services.oauth is not None
+    monkeypatch.setattr(
+        services.oauth.logto,
+        "authorize_access_token",
+        AsyncMock(return_value={"userinfo": {"sub": "logto-sub-3", "username": "eve"}}),
+    )
+    data = b64encode(json.dumps({"csrf_token": "planted", "login_next": "/wallet"}).encode())
+    logto_client.cookies.set("session", TimestampSigner(SESSION_SECRET).sign(data).decode())
+
+    response = logto_client.get("/auth/callback", follow_redirects=False)
+
+    assert response.headers["location"] == "/wallet"
+    assert list(session_data(response.cookies["session"])) == ["user_id"]
+
+
+@pytest.mark.parametrize(
+    ("candidate", "expected"),
+    [
+        ("/wallet", "/wallet"),
+        ("//evil.example", "/"),
+        ("/\\evil.example", "/"),
+        ("https://evil.example", "/"),
+        (None, "/"),
+    ],
+)
+def test_safe_next_keeps_only_local_paths(candidate: str | None, expected: str) -> None:
+    assert safe_next(candidate) == expected

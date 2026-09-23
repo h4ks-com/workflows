@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from starlette.datastructures import FormData
 from starlette.responses import Response
 
-from workflows.account import ledger_entries, linked_identities, topup_url
+from workflows.account import ledger_entries, linked_identities, topup_url, unlink_identity
 from workflows.api import (
     QuoteRequest,
     get_job_or_404,
@@ -253,6 +253,17 @@ async def wallet_topup(page: PageCtx) -> Response:
     beans = form_int(form, "beans")
     url = topup_url(page.services.settings.beans_url, page.user.username, beans)
     return RedirectResponse(url, status_code=303)
+
+
+@router.post("/wallet/unlink")
+async def wallet_unlink(page: PageCtx) -> Response:
+    if page.user is None:
+        return login_redirect("/wallet")
+    form = await page.request.form()
+    csrf = form.get("csrf_token")
+    verify_csrf(page.request, csrf if isinstance(csrf, str) else "")
+    unlink_identity(page.session, page.user, form_str(form, "identity"))
+    return RedirectResponse("/wallet", status_code=303)
 
 
 def _require_admin_page(page: Page) -> RedirectResponse | None:
