@@ -28,8 +28,8 @@ def client() -> Iterator[httpx.Client]:
 
 def dev_login(client: httpx.Client) -> str:
     username = f"e2e-{uuid.uuid4().hex[:8]}"
-    response = client.get("/login", params={"as": username})
-    response.raise_for_status()
+    response = client.get("/login", params={"as": username}, follow_redirects=False)
+    assert response.is_redirect
     return username
 
 
