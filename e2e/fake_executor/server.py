@@ -9,13 +9,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 API_KEY = os.environ.get("FAKE_EXECUTOR_API_KEY", "")
 STEP_DELAY_SECONDS = 0.2
 
-STEPS = {
-    "parody": ["fetch", "separate", "align", "lyrics", "sing", "splice"],
-    "song": ["write", "generate", "store"],
-    "voice": ["fetch", "separate", "convert", "mix"],
-    "podcast": ["research", "cast", "write", "speak", "bed", "mix"],
-}
-
 
 def _callback(callback_url: str, callback_token: str, body: Mapping[str, object]) -> None:
     request = urllib.request.Request(
@@ -33,10 +26,10 @@ def _callback(callback_url: str, callback_token: str, body: Mapping[str, object]
 def _run_job(job: dict[str, object]) -> None:
     callback_url = str(job["callback_url"])
     callback_token = str(job["callback_token"])
-    job_type = str(job["type"])
-    for step in STEPS.get(job_type, []):
-        time.sleep(STEP_DELAY_SECONDS)
+    steps = job["steps"]
+    for step in steps if isinstance(steps, list) else []:
         _callback(callback_url, callback_token, {"kind": "step", "step": step})
+        time.sleep(STEP_DELAY_SECONDS)
     if "FAIL" in json.dumps(job.get("params")):
         _callback(callback_url, callback_token, {"kind": "error", "message": "forced failure"})
         return

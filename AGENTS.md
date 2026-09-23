@@ -51,12 +51,15 @@ h4ks workflows is a storefront and queue for workflows that run elsewhere. It se
 - No bare `except`. Catch only the exceptions actually expected.
 
 ## Conventions
-- Credits are integers. 1 bean is 100 credits. Every balance change goes through `ledger.py`, which writes a ledger entry and updates the cached balance on the user in the same transaction.
+- Credits are integers. 1 bean is 100 credits. Every balance change goes through `ledger.py`, which writes a ledger entry and updates the cached balance on the user in the same transaction. The ledger changes balances with SQL increments and rereads the user before every check.
+- Never `await` between reading a balance and committing. The app shares one event loop, so another request can change the balance at any `await`.
 - The daily free allowance sets the free balance to 500 on the first action of a UTC day and is spent before paid credits.
 - A job pays a fixed quote from its type's formula. Credits are reserved when the job is queued, captured on success, and refunded on failure or cancellation.
 - Job types live in code in `jobtypes.py`. A type whose `EXECUTOR_URL_<TYPE>` is empty is listed as unavailable and refuses quotes and orders.
-- Executor dispatch carries the `X-API-Key` header. Executors call back with the per-job bearer token; we store only its hash.
-- Lifecycle changes publish on the event bus after the state change, for live views.
+- Executor dispatch carries the `X-API-Key` header and a JSON body with `job_id`, `type`, `params`, `steps` (step names in order), `callback_url` and `callback_token`. Executors call back with the per-job bearer token; we store only its hash.
+- Executor contract: accept the dispatch with a 2xx and send the first `step` event right away. A 4xx/5xx answer or a refused connection fails the job and refunds it. A dispatch timeout leaves the job running, and a job with no event within `FIRST_EVENT_TIMEOUT` seconds fails and is refunded. Executors retry callbacks: a repeated `result` after success or `error` after failure gets 204, any other event after the job ended gets 409, which includes every callback for a cancelled job.
+- Lifecycle changes publish on the event bus after the commit, for live views.
+- The queue pause flag lives in memory, so a restart resumes the queue.
 - Prose (docs, commits): declarative, terse, no em dashes.
 
 ## Hygiene

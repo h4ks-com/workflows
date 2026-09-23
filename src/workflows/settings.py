@@ -9,6 +9,7 @@ DEFAULT_BASE_URL = "http://localhost:8000"
 DEFAULT_YTDL_URL = "http://ytdl.ytdl.svc.cluster.local:8000"
 DEFAULT_BEANS_URL = "https://beans.h4ks.com"
 DEFAULT_EXECUTOR_TIMEOUT_FACTOR = 3.0
+DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS = 120
 EXECUTOR_URL_PREFIX = "EXECUTOR_URL_"
 
 
@@ -22,6 +23,7 @@ class Settings:
     executor_urls: Mapping[str, str] = field(default_factory=dict)
     executor_token: str = ""
     executor_timeout_factor: float = DEFAULT_EXECUTOR_TIMEOUT_FACTOR
+    first_event_timeout_seconds: int = DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS
     ytdl_url: str = DEFAULT_YTDL_URL
     ytdl_api_key: str = ""
     logto_endpoint: str = ""
@@ -61,6 +63,9 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
         executor_token=environ.get("WORKFLOWS_EXECUTOR_TOKEN", ""),
         executor_timeout_factor=float(
             environ.get("EXECUTOR_TIMEOUT_FACTOR", DEFAULT_EXECUTOR_TIMEOUT_FACTOR)
+        ),
+        first_event_timeout_seconds=int(
+            environ.get("FIRST_EVENT_TIMEOUT", DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS)
         ),
         ytdl_url=environ.get("YTDL_URL", DEFAULT_YTDL_URL).rstrip("/"),
         ytdl_api_key=environ.get("YTDL_API_KEY", ""),

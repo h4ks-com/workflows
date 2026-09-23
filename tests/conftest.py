@@ -1,3 +1,4 @@
+import asyncio
 import json
 from base64 import b64encode
 from collections.abc import Iterator
@@ -7,14 +8,15 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from itsdangerous import TimestampSigner
-from sqlalchemy import Engine
+from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session
 
 from workflows.app import create_app
 from workflows.auth import SESSION_USER_KEY
-from workflows.db import Job, User
+from workflows.db import Job, LedgerEntry, User
 from workflows.jobs import create_job, enqueue
 from workflows.jobtypes import Probe, ProbeError, Quote, SongParams
+from workflows.ledger import adjust
 from workflows.settings import Settings
 from workflows.state import Services
 
@@ -30,8 +32,10 @@ SONG_URL = "https://youtube.example/watch?v=song"
 class FakeProber:
     def __init__(self) -> None:
         self.durations: dict[str, float] = {SONG_URL: 100.0}
+        self.delay_seconds = 0.0
 
     async def info(self, url: str) -> Probe:
+        await asyncio.sleep(self.delay_seconds)
         if url not in self.durations:
             raise ProbeError(f"could not read {url}")
         return Probe(self.durations[url], "Some Song")
@@ -81,10 +85,27 @@ def client(app: FastAPI) -> TestClient:
 
 
 def make_user(session: Session, username: str, paid_credits: int = 0) -> User:
-    user = User(logto_sub=f"sub-{username}", username=username, paid_credits=paid_credits)
+    user = User(logto_sub=f"sub-{username}", username=username)
     session.add(user)
     session.commit()
+    if paid_credits:
+        adjust(session, user, paid_credits, "test balance")
+        session.commit()
     return user
+
+
+def ledger_sums(session: Session, user: User) -> tuple[int, int]:
+    free, paid = session.execute(
+        select(func.sum(LedgerEntry.free_delta), func.sum(LedgerEntry.paid_delta)).where(
+            LedgerEntry.user_id == user.id
+        )
+    ).one()
+    return free or 0, paid or 0
+
+
+def assert_ledger_matches(session: Session, user: User) -> None:
+    session.refresh(user)
+    assert ledger_sums(session, user) == (user.free_credits, user.paid_credits)
 
 
 def make_job(session: Session, services: Services, owner: User | None, credits: int = 100) -> Job:
@@ -101,6 +122,10 @@ def queue_job(session: Session, services: Services, owner: User, credits: int = 
     return job
 
 
-def log_in(client: TestClient, user: User) -> None:
+def session_cookie(user: User) -> str:
     data = b64encode(json.dumps({SESSION_USER_KEY: user.id}).encode())
-    client.cookies.set("session", TimestampSigner(SESSION_SECRET).sign(data).decode())
+    return TimestampSigner(SESSION_SECRET).sign(data).decode()
+
+
+def log_in(client: TestClient, user: User) -> None:
+    client.cookies.set("session", session_cookie(user))

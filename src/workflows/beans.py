@@ -3,10 +3,12 @@ import logging
 from datetime import datetime
 
 import httpx
+from pydantic import BaseModel, Field, StrictInt, TypeAdapter, ValidationError
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
-from workflows.db import JsonObject, User, utcnow
+from workflows.db import User, utcnow
 from workflows.ledger import topup
 from workflows.settings import Settings
 
@@ -16,6 +18,16 @@ POLL_SECONDS = 30.0
 FETCH_TIMEOUT_SECONDS = 15.0
 TRANSACTIONS_PATH = "/api/v1/transactions"
 WORKFLOWS_WALLET = "workflows"
+
+
+class BeansTransaction(BaseModel):
+    id: int | str
+    from_user: str
+    to_user: str
+    amount: StrictInt = Field(gt=0)
+
+
+TRANSACTIONS = TypeAdapter(list[BeansTransaction])
 
 
 class BeansPollError(Exception):
@@ -33,7 +45,10 @@ class BeansPoller:
 
     async def run(self) -> None:
         while True:
-            await self.tick()
+            try:
+                await self.tick()
+            except SQLAlchemyError:
+                logger.exception("beans poll could not credit transactions")
             await asyncio.sleep(POLL_SECONDS)
 
     async def tick(self) -> None:
@@ -47,7 +62,7 @@ class BeansPoller:
                 self._credit(session, transaction)
         self.last_success = utcnow()
 
-    async def _fetch(self) -> list[JsonObject]:
+    async def _fetch(self) -> list[BeansTransaction]:
         try:
             response = await self._http.get(
                 f"{self._settings.beans_url}{TRANSACTIONS_PATH}",
@@ -55,21 +70,13 @@ class BeansPoller:
                 timeout=FETCH_TIMEOUT_SECONDS,
             )
             response.raise_for_status()
-            body = response.json()
-        except (httpx.HTTPError, ValueError) as error:
+            return TRANSACTIONS.validate_json(response.content)
+        except (httpx.HTTPError, ValidationError) as error:
             raise BeansPollError(str(error)) from error
-        if not isinstance(body, list):
-            raise BeansPollError("beans returned an unexpected shape")
-        return body
 
-    def _credit(self, session: Session, transaction: JsonObject) -> None:
-        if transaction.get("to_user") != WORKFLOWS_WALLET:
+    def _credit(self, session: Session, transaction: BeansTransaction) -> None:
+        if transaction.to_user != WORKFLOWS_WALLET:
             return
-        from_user = transaction.get("from_user")
-        amount = transaction.get("amount")
-        txn_id = transaction.get("id")
-        if not isinstance(from_user, str) or not isinstance(amount, int) or txn_id is None:
-            return
-        user = session.scalar(select(User).where(User.username == from_user))
+        user = session.scalar(select(User).where(User.username == transaction.from_user))
         if user is not None:
-            topup(session, user, amount, str(txn_id))
+            topup(session, user, transaction.amount, str(transaction.id))

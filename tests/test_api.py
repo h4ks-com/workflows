@@ -1,3 +1,5 @@
+import asyncio
+import signal
 from datetime import timedelta
 
 import pytest
@@ -10,11 +12,13 @@ from conftest import (
     SERVICE_TOKEN,
     SONG_URL,
     FakeProber,
+    assert_ledger_matches,
     log_in,
     make_job,
     make_user,
     queue_job,
 )
+from workflows.app import exit_when_dead
 from workflows.auth import require_admin, require_service
 from workflows.db import Job, JobStatus, JsonObject
 from workflows.jobs import start, succeed
@@ -34,6 +38,27 @@ def start_job(session: Session, job: Job) -> str:
 def test_healthz_and_lifespan_run_the_worker(app: FastAPI) -> None:
     with TestClient(app) as client:
         assert client.get("/healthz").json() == {"status": "ok"}
+
+
+def test_healthz_fails_without_a_running_worker(client: TestClient) -> None:
+    assert client.get("/healthz").status_code == 503
+
+
+async def test_a_dead_background_task_stops_the_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    raised: list[int] = []
+    monkeypatch.setattr("workflows.app.signal.raise_signal", raised.append)
+
+    async def crash() -> None:
+        raise RuntimeError("boom")
+
+    crashed = asyncio.create_task(crash())
+    cancelled = asyncio.create_task(asyncio.sleep(10))
+    cancelled.cancel()
+    await asyncio.gather(crashed, cancelled, return_exceptions=True)
+    exit_when_dead(cancelled)
+    exit_when_dead(crashed)
+
+    assert raised == [signal.SIGTERM]
 
 
 def test_types_list_schema_steps_and_availability(client: TestClient) -> None:
@@ -188,7 +213,9 @@ def test_executor_events_drive_the_job(
     assert client.post(url, json=step, headers=headers).status_code == 204
     assert client.get(url.removesuffix("/events")).json()["progress"]["fraction"] == 0.55
     assert client.post(url, json=result, headers=headers).status_code == 204
-    assert client.post(url, json=result, headers=headers).status_code == 409
+    assert client.post(url, json=result, headers=headers).status_code == 204
+    error = {"kind": "error", "message": "late"}
+    assert client.post(url, json=error, headers=headers).status_code == 409
 
     view = client.get(url.removesuffix("/events")).json()
     assert view["status"] == "succeeded"
@@ -210,6 +237,35 @@ def test_executor_error_fails_and_refunds(
     session.refresh(job)
     session.refresh(user)
     assert (job.status, job.error, user.free_credits) == (JobStatus.FAILED, "oom", 500)
+    assert_ledger_matches(session, user)
+
+
+def test_callbacks_for_a_cancelled_job_conflict(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    job = queue_job(session, services, make_user(session, "alice"))
+    headers = {"Authorization": f"Bearer {start_job(session, job)}"}
+    job.status = JobStatus.CANCELLED
+    session.commit()
+
+    response = client.post(
+        f"/api/jobs/{job.id}/events", json={"kind": "error", "message": "x"}, headers=headers
+    )
+
+    assert response.status_code == 409
+
+
+def test_jobs_of_a_retired_type_still_render(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    job = queue_job(session, services, make_user(session, "alice"))
+    job.type = "karaoke"
+    session.commit()
+
+    assert client.get(f"/api/jobs/{job.id}").json()["type"] == "karaoke"
+    assert client.get("/api/queue").json()["queued"][0]["id"] == job.id
+    assert client.get(f"/jobs/{job.id}").status_code == 200
+    assert client.get("/").status_code == 200
 
 
 def test_owner_cancels_a_queued_job(
@@ -251,6 +307,22 @@ def test_average_of_recent_successes_drives_etas(
     queue_job(session, services, user)
 
     assert client.get("/api/queue").json()["queued"][0]["eta_seconds"] == 90
+
+
+def test_etas_scale_each_estimate_by_the_recent_speed(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    user = make_user(session, "alice", paid_credits=1000)
+    done = queue_job(session, services, user)
+    start_job(session, done)
+    succeed(session, done, {})
+    assert done.started_at is not None
+    done.finished_at = done.started_at + timedelta(seconds=2 * done.estimate_seconds)
+    longer = queue_job(session, services, user)
+    longer.estimate_seconds = 100
+    session.commit()
+
+    assert client.get("/api/queue").json()["queued"][0]["eta_seconds"] == 200
 
 
 def test_unconfirmed_job_has_no_owner(

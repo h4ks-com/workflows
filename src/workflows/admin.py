@@ -7,7 +7,7 @@ from sqlalchemy import select
 from workflows.api import JobView, get_job_or_404, job_view
 from workflows.auth import require_admin
 from workflows.db import User
-from workflows.jobs import announce, cancel
+from workflows.jobs import announce, cancel, job_type_for
 from workflows.ledger import adjust
 from workflows.state import AppServices, Db
 
@@ -32,6 +32,7 @@ class PauseView(BaseModel):
 class HealthView(BaseModel):
     executors: dict[str, bool] = Field(description="Whether each job type has an executor.")
     worker_paused: bool = Field(description="Whether the queue is paused.")
+    worker_alive: bool = Field(description="Whether the queue worker task is running.")
     beans_poller_last_success: datetime | None = Field(
         description="When the beans poller last read transactions successfully."
     )
@@ -50,7 +51,7 @@ async def admin_cancel_job(job_id: int, session: Db, services: AppServices) -> J
     cancel(session, job)
     session.commit()
     announce(services.bus, job)
-    return job_view(job, services.registry[job.type])
+    return job_view(job, job_type_for(services.registry, job.type))
 
 
 @router.post("/users/{username}/credits")
@@ -82,6 +83,7 @@ async def admin_health(services: AppServices) -> HealthView:
     return HealthView(
         executors={name: job_type.available for name, job_type in services.registry.items()},
         worker_paused=services.worker.paused,
+        worker_alive=services.worker.alive,
         beans_poller_last_success=services.beans_poller.last_success
         if services.beans_poller
         else None,

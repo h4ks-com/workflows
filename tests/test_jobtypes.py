@@ -8,6 +8,7 @@ from workflows.jobtypes import (
     PodcastParams,
     Probe,
     ProbeError,
+    RetiredParams,
     SongParams,
     VoiceParams,
     YtdlProber,
@@ -26,6 +27,7 @@ def test_quotes_follow_the_type_formulas() -> None:
     assert SongParams(prompt="cats").quote(None) == 105
     assert SongParams(prompt="cats", model="minimax", seconds=100).quote(None) == 240
     assert PodcastParams(prompt="cats").quote(None) == 660
+    assert RetiredParams().quote(None) == 0
 
 
 def test_url_types_need_a_probe() -> None:

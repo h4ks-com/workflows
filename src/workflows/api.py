@@ -18,6 +18,8 @@ from workflows.jobs import (
     create_job,
     enqueue,
     ensure_available,
+    is_terminal_repeat,
+    job_type_for,
     token_matches,
 )
 from workflows.jobtypes import JobParams, JobType, Quote, quote
@@ -193,8 +195,10 @@ def queue_view(session: Session, services: Services) -> QueueView:
     registry = services.registry
     return QueueView(
         paused=services.worker.paused,
-        running=job_view(running.job, registry[running.job.type], running) if running else None,
-        queued=[job_view(slot.job, registry[slot.job.type], slot) for slot in queued],
+        running=job_view(running.job, job_type_for(registry, running.job.type), running)
+        if running
+        else None,
+        queued=[job_view(slot.job, job_type_for(registry, slot.job.type), slot) for slot in queued],
     )
 
 
@@ -202,13 +206,15 @@ def job_views(session: Session, services: Services, user: str | None, limit: int
     query = select(Job).order_by(Job.id.desc()).limit(limit)
     if user is not None:
         query = query.join(Job.owner).where(User.username == user)
-    return [job_view(job, services.registry[job.type]) for job in session.scalars(query)]
+    return [
+        job_view(job, job_type_for(services.registry, job.type)) for job in session.scalars(query)
+    ]
 
 
 def job_detail_view(session: Session, services: Services, job_id: int) -> JobDetailView:
     job = get_job_or_404(session, job_id)
     slot = Estimator(session, services.registry).slot(job)
-    view = job_view(job, services.registry[job.type], slot)
+    view = job_view(job, job_type_for(services.registry, job.type), slot)
     events = [
         JobEventView(kind=event.kind, data=event.data, created_at=event.created_at)
         for event in job.events
@@ -305,7 +311,7 @@ async def cancel_job(
     cancel(session, job)
     session.commit()
     announce(services.bus, job)
-    return job_view(job, services.registry[job.type])
+    return job_view(job, job_type_for(services.registry, job.type))
 
 
 @router.post("/jobs/{job_id}/events", status_code=status.HTTP_204_NO_CONTENT)
@@ -318,7 +324,9 @@ async def executor_event(
 ) -> None:
     job = get_job_or_404(session, job_id)
     _ensure_callback_token(request, job)
-    data = apply_event(session, job, services.registry[job.type], event)
+    if is_terminal_repeat(job, event):
+        return
+    data = apply_event(session, job, job_type_for(services.registry, job.type), event)
     session.commit()
     services.bus.publish(job_topic(job.id), BusEvent(event.kind, data))
     if job.status != JobStatus.RUNNING:

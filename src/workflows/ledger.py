@@ -1,8 +1,10 @@
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from workflows.db import Job, LedgerEntry, LedgerKind, User, utcnow
 from workflows.settings import CREDITS_PER_BEAN, FREE_DAILY_CREDITS
+
+BALANCE_COLUMNS = ["free_credits", "paid_credits", "free_day"]
 
 
 class InsufficientCreditsError(Exception):
@@ -19,8 +21,16 @@ def _record(
     paid_delta: int = 0,
     job: Job | None = None,
 ) -> LedgerEntry:
-    user.free_credits += free_delta
-    user.paid_credits += paid_delta
+    session.execute(
+        update(User)
+        .where(User.id == user.id)
+        .values(
+            free_credits=User.free_credits + free_delta,
+            paid_credits=User.paid_credits + paid_delta,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    session.refresh(user, BALANCE_COLUMNS)
     entry = LedgerEntry(
         user_id=user.id,
         kind=kind,
@@ -34,10 +44,16 @@ def _record(
 
 def grant_daily(session: Session, user: User) -> None:
     today = utcnow().date()
+    session.refresh(user, BALANCE_COLUMNS)
     if user.free_day == today:
         return
+    session.execute(
+        update(User)
+        .where(User.id == user.id)
+        .values(free_day=today)
+        .execution_options(synchronize_session=False)
+    )
     _record(session, user, LedgerKind.FREE_GRANT, free_delta=FREE_DAILY_CREDITS - user.free_credits)
-    user.free_day = today
 
 
 def reserve(session: Session, user: User, job: Job) -> None:
@@ -65,6 +81,7 @@ def capture(session: Session, job: Job) -> None:
 def refund(session: Session, job: Job) -> None:
     if job.owner is None or job.reserved_free + job.reserved_paid == 0:
         return
+    session.refresh(job.owner, BALANCE_COLUMNS)
     reserved_on = job.queued_at.date() if job.queued_at else None
     free_back = job.reserved_free if job.owner.free_day == reserved_on else 0
     _record(
@@ -87,6 +104,7 @@ def topup(session: Session, user: User, beans: int, beans_txn_id: str) -> bool:
 
 
 def adjust(session: Session, user: User, credits: int, note: str) -> None:
+    session.refresh(user, BALANCE_COLUMNS)
     if user.paid_credits + credits < 0:
         raise InsufficientCreditsError(-credits, user.paid_credits)
     _record(session, user, LedgerKind.ADMIN_ADJUST, paid_delta=credits).note = note

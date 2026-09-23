@@ -23,7 +23,7 @@ from workflows.api import (
 from workflows.auth import CurrentUser, csrf_token, is_admin, verify_csrf
 from workflows.clients import templates
 from workflows.db import Job, JobStatus, JsonObject, User
-from workflows.jobs import announce, cancel, create_job, ensure_available
+from workflows.jobs import announce, cancel, create_job, ensure_available, job_type_for
 from workflows.jobs import enqueue as enqueue_job
 from workflows.jobtypes import JobType
 from workflows.ledger import InsufficientCreditsError, adjust
@@ -96,7 +96,7 @@ def _apply_field(params: JsonObject, form: FormData, spec: FieldSpec) -> None:
 def _queue_context(session: Session, services: Services) -> dict[str, object]:
     queue = queue_view(session, services)
     running = (
-        running_panel(queue.running, services.registry[queue.running.type], [])
+        running_panel(queue.running, job_type_for(services.registry, queue.running.type), [])
         if queue.running
         else None
     )
@@ -197,7 +197,7 @@ async def _create_and_redirect(
 @router.get("/jobs/{job_id}")
 async def job_page(job_id: int, page: PageCtx) -> Response:
     detail = job_detail_view(page.session, page.services, job_id)
-    job_type = page.services.registry[detail.type]
+    job_type = job_type_for(page.services.registry, detail.type)
     context = {
         "detail": detail,
         "job_type": type_view(job_type),
@@ -210,7 +210,7 @@ async def job_page(job_id: int, page: PageCtx) -> Response:
 @router.get("/partials/jobs/{job_id}")
 async def partial_job(job_id: int, page: PageCtx) -> Response:
     detail = job_detail_view(page.session, page.services, job_id)
-    job_type = page.services.registry[detail.type]
+    job_type = job_type_for(page.services.registry, detail.type)
     context = {
         "detail": detail,
         "job_type": type_view(job_type),

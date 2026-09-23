@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import secrets
+from collections.abc import Mapping
 from datetime import timedelta
 from typing import Annotated, Literal
 
@@ -10,12 +11,13 @@ from sqlalchemy.orm import Session
 
 from workflows.bus import QUEUE_TOPIC, BusEvent, EventBus, job_topic
 from workflows.db import Job, JobEvent, JobStatus, JsonObject, User, utcnow
-from workflows.jobtypes import JobParams, JobType, Quote
+from workflows.jobtypes import JobParams, JobType, Quote, retired_type
 from workflows.ledger import capture, refund, reserve
 
 STATUS_EVENT = "status"
 TERMINAL_STATUSES = frozenset({JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED})
 CONFIRMATION_EXPIRY = timedelta(hours=1)
+REPEATABLE_TERMINAL_EVENTS = {"result": JobStatus.SUCCEEDED, "error": JobStatus.FAILED}
 
 
 class JobError(Exception):
@@ -69,6 +71,10 @@ def token_matches(token: str, digest: str) -> bool:
     return hmac.compare_digest(hash_token(token).encode(), digest.encode())
 
 
+def job_type_for(registry: Mapping[str, JobType], type_name: str) -> JobType:
+    return registry.get(type_name) or retired_type(type_name)
+
+
 def ensure_available(job_type: JobType) -> None:
     if not job_type.available:
         raise JobError(f"{job_type.name} is not available yet")
@@ -111,7 +117,7 @@ def running_job(session: Session) -> Job | None:
 def start(job: Job) -> str:
     token = secrets.token_urlsafe(32)
     job.status = JobStatus.RUNNING
-    job.started_at = job.last_event_at = utcnow()
+    job.started_at = utcnow()
     job.callback_token_hash = hash_token(token)
     return token
 
@@ -144,6 +150,10 @@ def _set_progress(job: Job, event: StepEvent) -> None:
     job.progress_step = event.step
     job.progress_done = event.done
     job.progress_total = event.total
+
+
+def is_terminal_repeat(job: Job, event: ExecutorEvent) -> bool:
+    return REPEATABLE_TERMINAL_EVENTS.get(event.kind) == job.status
 
 
 def apply_event(session: Session, job: Job, job_type: JobType, event: ExecutorEvent) -> JsonObject:

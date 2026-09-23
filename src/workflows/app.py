@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import signal
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pathlib import Path
@@ -20,8 +22,10 @@ from workflows.login import build_oauth
 from workflows.login import router as login_router
 from workflows.mcp import build_mcp
 from workflows.settings import Settings, load_settings
-from workflows.state import Services
+from workflows.state import AppServices, Services
 from workflows.worker import QueueWorker
+
+logger = logging.getLogger(__name__)
 
 ERROR_STATUS = {
     JobError: 409,
@@ -49,8 +53,17 @@ async def _security_headers(
     return response
 
 
-async def healthz() -> dict[str, str]:
-    return {"status": "ok"}
+async def healthz(services: AppServices) -> JSONResponse:
+    if services.worker.alive:
+        return JSONResponse({"status": "ok"})
+    return JSONResponse({"status": "the queue worker stopped"}, status_code=503)
+
+
+def exit_when_dead(task: asyncio.Task[None]) -> None:
+    if task.cancelled():
+        return
+    logger.critical("background task %s died", task.get_name(), exc_info=task.exception())
+    signal.raise_signal(signal.SIGTERM)
 
 
 def _register_routers(app: FastAPI) -> None:
@@ -91,9 +104,11 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         async with AsyncExitStack() as stack:
             await stack.enter_async_context(mcp_app.lifespan(app))
-            tasks = [asyncio.create_task(worker.run())]
+            tasks = [worker.start()]
             if beans_poller is not None:
-                tasks.append(asyncio.create_task(beans_poller.run()))
+                tasks.append(asyncio.create_task(beans_poller.run(), name="beans poller"))
+            for task in tasks:
+                task.add_done_callback(exit_when_dead)
             yield
             for task in tasks:
                 task.cancel()

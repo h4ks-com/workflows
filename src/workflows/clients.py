@@ -14,7 +14,14 @@ from starlette.responses import Response
 from workflows.api import JobView, get_job_type, job_view
 from workflows.auth import csrf_token, current_user, require_service, verify_csrf
 from workflows.db import ExternalIdentity, Job, JobStatus, JsonObject, LinkRequest, User, utcnow
-from workflows.jobs import announce, create_job, enqueue, ensure_available, hash_token
+from workflows.jobs import (
+    announce,
+    create_job,
+    enqueue,
+    ensure_available,
+    hash_token,
+    job_type_for,
+)
 from workflows.jobtypes import JobType, quote
 from workflows.ledger import InsufficientCreditsError
 from workflows.state import AppServices, Db, Services
@@ -89,7 +96,9 @@ def _submit_for_linked_user(
         ) from error
     session.commit()
     announce(services.bus, job)
-    return ClientJobView(job=job_view(job, services.registry[job.type]), confirm_url=None)
+    return ClientJobView(
+        job=job_view(job, job_type_for(services.registry, job.type)), confirm_url=None
+    )
 
 
 def _submit_awaiting_confirmation(
@@ -170,7 +179,7 @@ async def confirm_page(
     if user is None:
         return RedirectResponse(f"/login?next=/confirm/{token}")
     job = _job_by_confirm_token(session, token)
-    job_type = services.registry[job.type]
+    job_type = job_type_for(services.registry, job.type)
     return templates.TemplateResponse(
         request,
         "confirm.html",

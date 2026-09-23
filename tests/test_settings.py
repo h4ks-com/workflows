@@ -12,6 +12,7 @@ def test_load_settings_reads_environment() -> None:
             "EXECUTOR_URL_PARODY": "https://n8n/webhook/parody",
             "WORKFLOWS_EXECUTOR_TOKEN": "token",
             "EXECUTOR_TIMEOUT_FACTOR": "4",
+            "FIRST_EVENT_TIMEOUT": "30",
         }
     )
 
@@ -20,6 +21,7 @@ def test_load_settings_reads_environment() -> None:
     assert settings.admin_users == {"alice", "bob"}
     assert settings.executor_urls == {"parody": "https://n8n/webhook/parody"}
     assert settings.executor_timeout_factor == 4.0
+    assert settings.first_event_timeout_seconds == 30
 
 
 def test_session_secret_is_required() -> None:

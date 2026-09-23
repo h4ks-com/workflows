@@ -4,25 +4,25 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from workflows.db import Job, JobStatus
-from workflows.jobs import queued_jobs, running_job
+from workflows.jobs import job_type_for, queued_jobs, running_job
 from workflows.jobtypes import JobType
 
 ROLLING_WINDOW = 20
 
 
-def average_seconds(session: Session, type_name: str) -> float | None:
+def speed_ratio(session: Session, type_name: str) -> float | None:
     query = (
-        select(Job.started_at, Job.finished_at)
+        select(Job.started_at, Job.finished_at, Job.estimate_seconds)
         .where(Job.type == type_name, Job.status == JobStatus.SUCCEEDED)
         .order_by(Job.finished_at.desc())
         .limit(ROLLING_WINDOW)
     )
-    durations = [
-        (finished - started).total_seconds()
-        for started, finished in session.execute(query)
-        if started and finished
+    ratios = [
+        (finished - started).total_seconds() / estimate
+        for started, finished, estimate in session.execute(query)
+        if started and finished and estimate > 0
     ]
-    return sum(durations) / len(durations) if durations else None
+    return sum(ratios) / len(ratios) if ratios else None
 
 
 def progress_fraction(job: Job, job_type: JobType) -> float:
@@ -48,25 +48,26 @@ class Estimator:
     def __init__(self, session: Session, registry: dict[str, JobType]) -> None:
         self._session = session
         self._registry = registry
-        self._averages: dict[str, float | None] = {}
+        self._ratios: dict[str, float | None] = {}
 
     def duration(self, job: Job) -> float:
-        if job.type not in self._averages:
-            self._averages[job.type] = average_seconds(self._session, job.type)
-        return self._averages[job.type] or job.estimate_seconds
+        if job.type not in self._ratios:
+            self._ratios[job.type] = speed_ratio(self._session, job.type)
+        return job.estimate_seconds * (self._ratios[job.type] or 1.0)
 
     def remaining(self, job: Job) -> float:
-        return (1.0 - progress_fraction(job, self._registry[job.type])) * self.duration(job)
+        job_type = job_type_for(self._registry, job.type)
+        return (1.0 - progress_fraction(job, job_type)) * self.duration(job)
 
     def queue(self) -> tuple[QueueSlot | None, list[QueueSlot]]:
         running = running_job(self._session)
-        elapsed = self.remaining(running) if running else 0.0
-        running_slot = QueueSlot(running, 0, 0, round(elapsed)) if running else None
+        finish_at = self.remaining(running) if running else 0.0
+        running_slot = QueueSlot(running, 0, 0, round(finish_at)) if running else None
         slots = []
         for position, job in enumerate(queued_jobs(self._session), start=1):
-            starts_in = elapsed
-            elapsed += self.duration(job)
-            slots.append(QueueSlot(job, position, round(starts_in), round(elapsed)))
+            starts_in = finish_at
+            finish_at += self.duration(job)
+            slots.append(QueueSlot(job, position, round(starts_in), round(finish_at)))
         return running_slot, slots
 
     def slot(self, job: Job) -> QueueSlot | None:

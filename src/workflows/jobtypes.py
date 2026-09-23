@@ -212,6 +212,22 @@ JOB_TYPES = (
 )
 
 
+class RetiredParams(JobParams):
+    def quote(self, probe: Probe | None) -> int:
+        return 0
+
+
+def retired_type(name: str) -> JobType:
+    return JobType(
+        name=name,
+        title=name,
+        description="This job type is no longer offered.",
+        pricing="not for sale",
+        params_model=RetiredParams,
+        steps=(),
+    )
+
+
 def build_registry(executor_urls: Mapping[str, str]) -> dict[str, JobType]:
     return {
         job_type.name: replace(job_type, executor_url=executor_urls.get(job_type.name, ""))

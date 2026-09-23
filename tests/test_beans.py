@@ -1,6 +1,10 @@
+import asyncio
+from unittest.mock import AsyncMock
+
 import httpx
 import pytest
 import respx
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from conftest import make_user
@@ -69,3 +73,35 @@ async def test_tick_swallows_beans_errors(poller: BeansPoller, response: httpx.R
     await poller.tick()
 
     assert poller.last_success is None
+
+
+@respx.mock
+@pytest.mark.parametrize("amount", [True, 0, -3, "3", 2.5])
+async def test_tick_rejects_malformed_amounts(
+    session: Session, poller: BeansPoller, amount: bool | int | str | float
+) -> None:
+    alice = make_user(session, "alice")
+    respx.get(TRANSACTIONS_URL).respond(
+        json=[{"id": 1, "from_user": "alice", "to_user": "workflows", "amount": amount}]
+    )
+
+    await poller.tick()
+
+    session.refresh(alice)
+    assert alice.paid_credits == 0
+    assert poller.last_success is None
+
+
+async def test_run_survives_database_errors(
+    poller: BeansPoller, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tick = AsyncMock(
+        side_effect=[OperationalError("tick", {}, Exception()), asyncio.CancelledError]
+    )
+    monkeypatch.setattr(poller, "tick", tick)
+    monkeypatch.setattr("workflows.beans.asyncio.sleep", AsyncMock())
+
+    with pytest.raises(asyncio.CancelledError):
+        await poller.run()
+
+    assert tick.await_count == 2
