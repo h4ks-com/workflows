@@ -106,13 +106,15 @@ class SongParams(JobParams):
 
 class VoiceParams(JobParams):
     url: HttpUrl = Field(description="Song whose vocals get the new voice.")
-    voice_url: HttpUrl = Field(description="Reference clip of the target voice, 10 to 30 seconds.")
+    voice_url: HttpUrl = Field(
+        description="Clip or song with the target voice. We use its loudest 30 seconds."
+    )
 
     def media_url(self) -> str:
         return str(self.url)
 
     def quote(self, probe: Probe | None) -> int:
-        return round(0.8 * media_seconds(probe) + 90)
+        return round(2 * media_seconds(probe) + 90)
 
 
 class PodcastParams(JobParams):
@@ -193,7 +195,7 @@ JOB_TYPES = (
         name="voice",
         title="Voice swap",
         description="Sing a song in another voice.",
-        pricing="0.8 credits per second of the song, plus 90",
+        pricing="2 credits per second of the song, plus 90",
         params_model=VoiceParams,
         steps=_steps(("fetch", 10), ("separate", 30), ("convert", 45), ("mix", 15)),
     ),
@@ -204,7 +206,7 @@ JOB_TYPES = (
         pricing="90 credits per minute, plus 120",
         params_model=PodcastParams,
         steps=_steps(
-            ("research", 10), ("cast", 5), ("write", 20), ("speak", 40), ("bed", 15), ("mix", 10)
+            ("research", 10), ("cast", 5), ("bed", 15), ("write", 20), ("speak", 40), ("mix", 10)
         ),
     ),
 )

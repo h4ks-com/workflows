@@ -22,7 +22,7 @@ PROBE = Probe(100.0, "Some Song")
 
 def test_quotes_follow_the_type_formulas() -> None:
     assert ParodyParams(url=SONG_URL).quote(PROBE) == 240
-    assert VoiceParams(url=SONG_URL, voice_url=SONG_URL).quote(PROBE) == 170
+    assert VoiceParams(url=SONG_URL, voice_url=SONG_URL).quote(PROBE) == 290
     assert SongParams(prompt="cats").quote(None) == 105
     assert SongParams(prompt="cats", model="minimax", seconds=100).quote(None) == 240
     assert PodcastParams(prompt="cats").quote(None) == 660
@@ -49,7 +49,7 @@ def test_registry_marks_types_without_executor_unavailable() -> None:
     assert list(registry) == ["parody", "song", "voice", "podcast"]
     assert registry["parody"].available
     assert not registry["voice"].available
-    assert registry["podcast"].step_names() == ["research", "cast", "write", "speak", "bed", "mix"]
+    assert registry["podcast"].step_names() == ["research", "cast", "bed", "write", "speak", "mix"]
 
 
 @respx.mock
