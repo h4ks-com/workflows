@@ -5,16 +5,19 @@ on:
     - cron: "0 3 * * 1"
   workflow_dispatch:
 
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
 jobs:
   renovate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: renovatebot/github-action@v46.2.4
         with:
           configurationFile: renovate.json
-          # GITHUB_TOKEN works but renovate PRs won't trigger CI (GitHub policy);
-          # add a repo-scoped PAT as RENOVATE_TOKEN to get tested update PRs
-          token: ${{ secrets.RENOVATE_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
         env:
           RENOVATE_REPOSITORIES: ${{ github.repository }}
