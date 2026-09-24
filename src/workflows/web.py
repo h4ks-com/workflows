@@ -17,7 +17,14 @@ from workflows.account import (
     topup_url,
     unlink_identity,
 )
-from workflows.admin import AdjustCreditsRequest, adjust_credits, cancel_job, health, set_paused
+from workflows.admin import (
+    AdjustCreditsRequest,
+    adjust_credits,
+    cancel_job,
+    health,
+    remove_job_files,
+    set_paused,
+)
 from workflows.api import QuoteRequest, get_job_type, price_request
 from workflows.auth import csrf_token, require_admin
 from workflows.db import Job, JobStatus, JsonObject, User
@@ -46,6 +53,8 @@ type Context = dict[str, TemplateValue]
 RESERVED_STATUSES = (JobStatus.QUEUED, JobStatus.RUNNING)
 RECENT_RESULTS = 4
 USER_JOB_LIMIT = 50
+ADMIN_RECENT_JOBS = 50
+ADMIN_JOB_FETCH = 200
 PROBE_FAILED = "could not read that URL"
 FORM_INVALID = "check the form for mistakes"
 
@@ -72,7 +81,9 @@ def _queue_context(session: Session, services: Services) -> Context:
     )
     types = [type_view(job_type) for job_type in services.registry.values()]
     recent = [
-        job for job in job_views(session, services, None, 20) if job.status == JobStatus.SUCCEEDED
+        job
+        for job in job_views(session, services, None, 20)
+        if job.status == JobStatus.SUCCEEDED and job.removed_at is None
     ][:RECENT_RESULTS]
     return {"queue": queue, "running": running, "types": types, "recent": recent}
 
@@ -256,8 +267,17 @@ async def _admin_redirect(page: Page) -> RedirectResponse | None:
 
 
 def _render_admin(page: Page, error: str | None = None, status_code: int = 200) -> Response:
+    queue = queue_view(page.session, page.services)
+    reserved = {queue.running.id} if queue.running else set()
+    reserved |= {slot.id for slot in queue.queued}
+    recent_jobs = [
+        job
+        for job in job_views(page.session, page.services, None, ADMIN_JOB_FETCH)
+        if job.id not in reserved
+    ][:ADMIN_RECENT_JOBS]
     context: Context = {
-        "queue": queue_view(page.session, page.services),
+        "queue": queue,
+        "recent_jobs": recent_jobs,
         "health": health(page.services),
         "csrf_token": csrf_token(page.request),
         "active": "admin",
@@ -305,6 +325,19 @@ async def admin_cancel(page: PageCtx) -> Response:
         return _render_admin(page, str(error.detail), error.status_code)
     except JobError as error:
         return _render_admin(page, str(error), status.HTTP_409_CONFLICT)
+    return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/jobs/{job_id}/remove")
+async def admin_remove(job_id: int, page: PageCtx) -> Response:
+    redirect = await _admin_redirect(page)
+    if redirect:
+        return redirect
+    await verified_form(page.request)
+    try:
+        await remove_job_files(page.session, page.services, job_id)
+    except HTTPException as error:
+        return _render_admin(page, str(error.detail), error.status_code)
     return RedirectResponse("/admin", status_code=303)
 
 

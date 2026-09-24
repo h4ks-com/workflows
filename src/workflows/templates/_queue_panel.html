@@ -35,7 +35,7 @@
         <span class="num muted eta">~{{ (slot.starts_in_seconds // 60) if slot.starts_in_seconds is not none else '?' }} min</span>
       </a>
       {% else %}
-      <p class="muted">nothing in line. <a href="#create">create something</a>.</p>
+      <p class="muted">nothing in line.</p>
       {% endfor %}
     </div>
   </div>

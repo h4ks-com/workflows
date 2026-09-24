@@ -14,7 +14,7 @@ from starlette.datastructures import FormData
 from starlette.responses import Response
 
 from workflows.auth import CurrentUser, is_admin, verify_csrf
-from workflows.db import Job, JobStatus, LedgerEntry, LedgerKind, LinkRequest, User
+from workflows.db import Job, JobStatus, LedgerEntry, LedgerKind, LinkRequest, User, utcnow
 from workflows.jobtypes import JobType, Step
 from workflows.ledger import grant_daily
 from workflows.settings import Settings
@@ -172,9 +172,33 @@ def ledger_label(kind: str) -> str:
     return LEDGER_LABELS.get(LedgerKind(kind), kind)
 
 
+MINUTE_SECONDS = 60
+HOUR_SECONDS = 3600
+DAY_SECONDS = 86400
+
+
+def short_time(value: datetime | None) -> str:
+    return value.strftime("%b %d %H:%M") if value else "never"
+
+
+def relative_time(value: datetime | None) -> str:
+    if value is None:
+        return "never"
+    seconds = (utcnow() - value).total_seconds()
+    if seconds < MINUTE_SECONDS:
+        return "just now"
+    if seconds < HOUR_SECONDS:
+        return f"{int(seconds // MINUTE_SECONDS)}m ago"
+    if seconds < DAY_SECONDS:
+        return f"{int(seconds // HOUR_SECONDS)}h ago"
+    return short_time(value)
+
+
 templates.env.tests["playable"] = is_playable_url
 templates.env.filters["status_label"] = status_label
 templates.env.filters["ledger_label"] = ledger_label
+templates.env.filters["short_time"] = short_time
+templates.env.filters["relative_time"] = relative_time
 
 
 @dataclass(frozen=True)

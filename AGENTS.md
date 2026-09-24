@@ -8,7 +8,7 @@ h4ks workflows is a storefront and queue for workflows that run elsewhere. It se
 ## Where things live
 - App factory (routers, middleware, error handlers, lifespan tasks): `src/workflows/app.py`
 - Settings, one module that reads every environment variable: `src/workflows/settings.py` (all listed in `.env.example`)
-- Database models and engine (SQLAlchemy, `create_all` on startup): `src/workflows/db.py`
+- Database models and engine (SQLAlchemy, `create_all` plus additive column migrations on startup): `src/workflows/db.py`
 - Credits ledger (daily free grant, reserve, capture, refund, top-up, admin adjust): `src/workflows/ledger.py`
 - Job type registry, params models, quotes, probing: `src/workflows/jobtypes.py`
 - Job lifecycle and the executor callback contract: `src/workflows/jobs.py`
@@ -21,6 +21,7 @@ h4ks workflows is a storefront and queue for workflows that run elsewhere. It se
 - JSON API under `/api`: `src/workflows/api.py` with its response models in `src/workflows/views.py`, SSE streams: `src/workflows/stream.py`, read-only MCP at `/mcp`: `src/workflows/mcp.py`
 - Login (Logto OIDC, dev login): `src/workflows/login.py`; account, wallet and top-ups: `src/workflows/account.py`; Beans top-up poller: `src/workflows/beans.py`
 - Client-facing job submission and identity linking, confirm and link pages: `src/workflows/clients.py`; admin API: `src/workflows/admin.py`
+- Object storage for admin removal of generated files (MinIO): `src/workflows/storage.py`
 - Web pages: `src/workflows/web.py` with `webforms.py`, `webviews.py` (templates, page context, rendering, CSRF form helper), `templates/` and `static/`
 - The `Makefile` is the single canonical interface for all checks; CI and pre-commit both call it.
 
@@ -63,6 +64,8 @@ h4ks workflows is a storefront and queue for workflows that run elsewhere. It se
 - A job submitted through `POST /api/clients/jobs` can carry a `webhook` (`url`, `token`, `extra_params`, `message_prefix`). When the job starts, succeeds, fails or is cancelled, `webhooks.py` posts JSON with `Authorization: Bearer <token>`: the `extra_params`, then `message` (the prefix plus a short plain sentence), `job_id`, `type`, `status`, `run_url` and `result_urls` (file URLs on success). Delivery is best-effort: it retries connection errors, timeouts and 5xx three times with backoff, gives up on 4xx, and never affects the job.
 - A trusted client can `PUT /api/clients/subscription` with `url` and `signing_key` (upserted by `url`, removed with `DELETE /api/clients/subscription?url=...`) to get a signed raw event for every paid job when it is queued, starts, succeeds, fails or is cancelled. The body is `event`, `job_id`, `type`, `type_title`, `status`, `owner`, `title` (the result title), `run_url`, `result_urls`, `error`, with header `X-Webhook-Signature: sha256=<hex>` where `hex` is `HMAC-SHA256(signing_key, json.dumps(payload, sort_keys=True))`. Same retry and logging rules as the per-job webhook.
 - The queue pause flag lives in memory, so a restart resumes the queue.
+- The production database is never reset. On startup, any column declared on a model but missing from an existing table is added with `ALTER TABLE ... ADD COLUMN`. A new column must be nullable or have a server default, since it lands on rows that already exist.
+- An admin can remove a job's generated files (`POST /api/admin/jobs/{id}/remove`). It deletes every result file URL and the metadata URL from object storage (MinIO, buckets `workflows` and `suno`, configured by `MINIO_ENDPOINT`/`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY`/`MINIO_USE_SSL`), clears `Job.result` and sets `Job.removed_at`. A removed job's result is replaced everywhere with "removed by an admin".
 - Logged-in browser calls that change state under `/api` send `X-Requested-With: fetch`; requests with a bearer token are exempt. Request bodies are capped at 256 KB.
 - Prose (docs, commits): declarative, terse, no em dashes.
 

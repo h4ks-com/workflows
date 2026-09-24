@@ -1,16 +1,20 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from workflows.auth import require_admin, require_fetch_header
-from workflows.db import Job, User
+from workflows.db import Job, JobEvent, JsonObject, User, utcnow
 from workflows.jobs import announce, cancel, job_type_for
 from workflows.ledger import adjust
 from workflows.state import AppServices, Db, Services
+from workflows.storage import object_location
 from workflows.views import JobView, get_job_or_404, job_view
+
+REMOVED_MESSAGE = "removed by an admin"
+STORAGE_NOT_CONFIGURED = "storage is not configured"
 
 router = APIRouter(
     prefix="/api/admin", dependencies=[Depends(require_fetch_header), Depends(require_admin)]
@@ -68,6 +72,42 @@ def set_paused(services: Services, paused: bool) -> PauseView:
     return PauseView(paused=paused)
 
 
+def _file_url(file: JsonValue) -> str | None:
+    url = file.get("url") if isinstance(file, dict) else None
+    return url if isinstance(url, str) else None
+
+
+def _file_urls(result: JsonObject) -> list[str]:
+    files = result.get("files")
+    if not isinstance(files, list):
+        return []
+    return [url for file in files if (url := _file_url(file)) is not None]
+
+
+def _result_urls(result: JsonObject) -> list[str]:
+    urls = _file_urls(result)
+    metadata_url = result.get("metadata_url")
+    if isinstance(metadata_url, str):
+        urls.append(metadata_url)
+    return urls
+
+
+async def remove_job_files(session: Session, services: Services, job_id: int) -> Job:
+    if services.storage is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, STORAGE_NOT_CONFIGURED)
+    job = get_job_or_404(session, job_id)
+    for url in _result_urls(job.result or {}):
+        located = object_location(services.settings.minio_endpoint, url)
+        if located is not None:
+            await services.storage.remove(*located)
+    job.result = None
+    job.removed_at = utcnow()
+    session.add(JobEvent(job_id=job.id, kind="log", data={"message": REMOVED_MESSAGE}))
+    session.commit()
+    announce(services.bus, job)
+    return job
+
+
 def health(services: Services) -> HealthView:
     return HealthView(
         executors={name: job_type.available for name, job_type in services.registry.items()},
@@ -82,6 +122,12 @@ def health(services: Services) -> HealthView:
 @router.post("/jobs/{job_id}/cancel")
 async def admin_cancel_job(job_id: int, session: Db, services: AppServices) -> JobView:
     job = cancel_job(session, services, job_id)
+    return job_view(job, job_type_for(services.registry, job.type))
+
+
+@router.post("/jobs/{job_id}/remove")
+async def admin_remove_job(job_id: int, session: Db, services: AppServices) -> JobView:
+    job = await remove_job_files(session, services, job_id)
     return job_view(job, job_type_for(services.registry, job.type))
 
 

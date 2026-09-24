@@ -56,6 +56,7 @@ class JobView(BaseModel):
     params: JsonObject = Field(description="Job parameters.")
     progress: ProgressView = Field(description="Executor progress.")
     result: JsonObject | None = Field(description="Files and title the executor produced.")
+    removed_at: datetime | None = Field(description="When an admin removed the result files.")
     error: str | None = Field(description="Why the job failed.")
     created_at: datetime = Field(description="When the job was ordered.")
     queued_at: datetime | None = Field(description="When credits were reserved.")
@@ -117,6 +118,7 @@ def job_view(job: Job, job_type: JobType, slot: QueueSlot | None = None) -> JobV
         params=job.params,
         progress=progress,
         result=job.result,
+        removed_at=job.removed_at,
         error=job.error,
         created_at=job.created_at,
         queued_at=job.queued_at,

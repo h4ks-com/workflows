@@ -1,9 +1,37 @@
 {% extends "base.html" %}
 {% block title %}admin · h4ks workflows{% endblock %}
+{% macro job_row(job) %}
+<tr>
+  <td><a href="/jobs/{{ job.id }}">#{{ job.id }}</a></td>
+  <td>{{ job.type }}</td>
+  <td>{{ job.owner or 'guest' }}</td>
+  <td><span class="tag {{ 'run' if job.status == 'running' else ('ok' if job.status == 'succeeded' else ('bad' if job.status in ('failed', 'cancelled') else 'wait')) }}">{{ job.status|status_label }}</span></td>
+  <td>{{ job.quote }}</td>
+  <td class="num">{{ job.created_at|short_time }}</td>
+  <td>
+    <div class="row">
+      {% if job.status in ('awaiting_confirmation', 'queued', 'running') %}
+      <form method="post" action="/admin/cancel">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="job_id" value="{{ job.id }}">
+        <button class="btn ghost" type="submit">cancel and refund</button>
+      </form>
+      {% endif %}
+      {% if job.result and job.result.files %}
+      <form method="post" action="/admin/jobs/{{ job.id }}/remove" data-confirm="remove the result files for job #{{ job.id }}?">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button class="btn ghost" type="submit">remove files</button>
+      </form>
+      {% endif %}
+    </div>
+  </td>
+</tr>
+{% endmacro %}
 {% block content %}
 <section class="page">
 <h1>admin</h1>
 {% if error %}<div class="notice warn">{{ error }}</div>{% endif %}
+
 <div class="grid-2">
   <div class="panel">
     <span class="label">queue</span>
@@ -14,40 +42,42 @@
         <button class="btn ghost" type="submit">{{ 'resume queue' if queue.paused else 'pause queue' }}</button>
       </form>
     </div>
-    <span class="label">executors</span>
-    <div class="kv">{% for name, ok in health.executors.items() %}<span>{{ name }}</span><span class="{{ 'ok' if ok else 'muted' }}">{{ 'ready' if ok else 'not configured' }}</span>{% endfor %}</div>
-    <span class="label">worker</span>
-    <p class="{{ 'ok' if health.worker_alive else 'muted' }}">{{ 'running' if health.worker_alive else 'stopped' }}</p>
-    <span class="label">beans poller</span>
-    <p class="muted num">{{ health.beans_poller_last_success or 'never' }}</p>
   </div>
   <div class="panel">
-    <span class="label">cancel a job</span>
-    <form method="post" action="/admin/cancel">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <div class="row"><input type="number" name="job_id" placeholder="job id" required><button class="btn" type="submit">cancel and refund</button></div>
-    </form>
-    <span class="label">grant credits</span>
-    <form method="post" action="/admin/credits">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <div class="field"><label for="grant-user">username</label><input id="grant-user" type="text" name="username" required></div>
-      <div class="field"><label for="grant-credits">credits</label><input id="grant-credits" type="number" name="credits" required><small>use a negative number to take credits away</small></div>
-      <div class="field"><label for="grant-note">reason</label><input id="grant-note" type="text" name="note" required></div>
-      <button class="btn" type="submit">grant</button>
-    </form>
+    <span class="label">health</span>
+    <div class="kv">
+      {% for name, ok in health.executors.items() %}<span>{{ name }}</span><span class="{{ 'ok' if ok else 'muted' }}">{{ 'ready' if ok else 'not configured' }}</span>{% endfor %}
+      <span>worker</span><span class="{{ 'ok' if health.worker_alive else 'muted' }}">{{ 'running' if health.worker_alive else 'stopped' }}</span>
+      <span>beans poller</span><span class="muted num">{{ health.beans_poller_last_success|relative_time }}</span>
+    </div>
   </div>
 </div>
+
 <div class="panel">
-  <span class="label">running and in line</span>
-  <div class="queue">
-    {% if queue.running %}
-    <div class="q"><span class="pos">run</span><span class="what"><b>{{ queue.running.owner or 'guest' }}</b> · {{ queue.running.type }}<small><a href="/jobs/{{ queue.running.id }}">job #{{ queue.running.id }}</a></small></span><span class="tag run">running</span><span></span></div>
-    {% endif %}
-    {% for slot in queue.queued %}
-    <div class="q"><span class="pos">#{{ slot.position }}</span><span class="what"><b>{{ slot.owner or 'guest' }}</b> · {{ slot.type }}<small><a href="/jobs/{{ slot.id }}">job #{{ slot.id }}</a></small></span><span class="tag wait">in line</span><span></span></div>
-    {% else %}
-    {% if not queue.running %}<p class="muted">queue is empty.</p>{% endif %}
-    {% endfor %}
+  <span class="label">credits</span>
+  <form method="post" action="/admin/credits" class="form-grid">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="field"><label for="grant-user">username</label><input id="grant-user" type="text" name="username" required></div>
+    <div class="field"><label for="grant-credits">credits</label><input id="grant-credits" type="number" name="credits" required><small>use a negative number to take credits away</small></div>
+    <div class="field"><label for="grant-note">reason</label><input id="grant-note" type="text" name="note" required></div>
+    <button class="btn" type="submit">grant</button>
+  </form>
+</div>
+
+<div class="panel">
+  <span class="label">jobs</span>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>id</th><th>type</th><th>owner</th><th>status</th><th>cost</th><th>created</th><th></th></tr></thead>
+      <tbody>
+        {% if queue.running %}{{ job_row(queue.running) }}{% endif %}
+        {% for slot in queue.queued %}{{ job_row(slot) }}{% endfor %}
+        {% for job in recent_jobs %}{{ job_row(job) }}{% endfor %}
+        {% if not queue.running and not queue.queued and not recent_jobs %}
+        <tr><td colspan="7" class="muted">no jobs yet.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
   </div>
 </div>
 </section>

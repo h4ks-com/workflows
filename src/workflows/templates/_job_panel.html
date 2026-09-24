@@ -32,6 +32,8 @@
 <div class="notice">cancelled. the credits were refunded.</div>
 {% elif detail.status == 'failed' %}
 <div class="notice warn">failed: {{ detail.error }}, credits refunded.</div>
+{% elif detail.removed_at %}
+<div class="notice">removed by an admin.</div>
 {% endif %}
 
 <div class="grid-2">
@@ -65,7 +67,7 @@
     </div>
     {% endif %}
     {% else %}
-    <div class="res" style="background:var(--bg)"><button class="play" type="button" disabled style="opacity:.4">▶</button><div class="meta"><span class="t muted">your result shows up here when the job is done</span></div></div>
+    <div class="res" style="background:var(--bg)"><button class="play" type="button" disabled style="opacity:.4">▶</button><div class="meta"><span class="t muted">{{ 'removed by an admin' if detail.removed_at else 'your result shows up here when the job is done' }}</span></div></div>
     {% endfor %}
     <span class="label">activity</span>
     <div class="log">

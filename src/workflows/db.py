@@ -3,7 +3,17 @@ from enum import StrEnum
 from pathlib import Path
 
 from pydantic import JsonValue
-from sqlalchemy import JSON, DateTime, Dialect, Engine, ForeignKey, create_engine, make_url
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Dialect,
+    Engine,
+    ForeignKey,
+    create_engine,
+    inspect,
+    make_url,
+    text,
+)
 from sqlalchemy.orm import (
     DeclarativeBase,
     Mapped,
@@ -115,6 +125,7 @@ class Job(Base):
     started_at: Mapped[datetime | None]
     finished_at: Mapped[datetime | None]
     last_event_at: Mapped[datetime | None]
+    removed_at: Mapped[datetime | None]
 
     owner: Mapped[User | None] = relationship()
     events: Mapped[list[JobEvent]] = relationship(order_by="JobEvent.id")
@@ -153,12 +164,32 @@ class LedgerEntry(Base):
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
+def _add_missing_columns(engine: Engine) -> None:
+    # create_all only creates tables that don't exist yet, so a column added to a model
+    # after the production database was created needs its own additive migration.
+    inspector = inspect(engine)
+    existing_tables = set(inspector.get_table_names())
+    with engine.begin() as connection:
+        for table in Base.metadata.tables.values():
+            if table.name not in existing_tables:
+                continue
+            existing_columns = {column["name"] for column in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing_columns:
+                    continue
+                column_type = column.type.compile(dialect=engine.dialect)
+                connection.execute(
+                    text(f"ALTER TABLE {table.name} ADD COLUMN {column.name} {column_type}")
+                )
+
+
 def connect(database_url: str) -> Engine:
     database = make_url(database_url).database
     if database:
         Path(database).parent.mkdir(parents=True, exist_ok=True)
     engine = create_engine(database_url, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+    _add_missing_columns(engine)
     return engine
 
 

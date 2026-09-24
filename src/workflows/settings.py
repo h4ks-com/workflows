@@ -31,6 +31,10 @@ class Settings:
     beans_url: str = DEFAULT_BEANS_URL
     beans_token: str = ""
     dev_login: bool = False
+    minio_endpoint: str = ""
+    minio_access_key: str = ""
+    minio_secret_key: str = ""
+    minio_use_ssl: bool = True
 
     def __post_init__(self) -> None:
         if self.n8n_url and not self.executor_token:
@@ -66,4 +70,8 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
         beans_url=environ.get("BEANS_URL", DEFAULT_BEANS_URL).rstrip("/"),
         beans_token=environ.get("BEANS_TOKEN", ""),
         dev_login=environ.get("DEV_LOGIN", "").strip().lower() == "true",
+        minio_endpoint=environ.get("MINIO_ENDPOINT", ""),
+        minio_access_key=environ.get("MINIO_ACCESS_KEY", ""),
+        minio_secret_key=environ.get("MINIO_SECRET_KEY", ""),
+        minio_use_ssl=environ.get("MINIO_USE_SSL", "true").strip().lower() == "true",
     )

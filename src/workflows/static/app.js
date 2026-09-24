@@ -1,6 +1,10 @@
 (() => {
   "use strict";
 
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) location.reload();
+  });
+
   const TERMINAL = ["succeeded", "failed", "cancelled"];
 
   function fmtEta(seconds) {
@@ -22,6 +26,11 @@
     });
   }
   setInterval(countdowns, 1000);
+
+  document.addEventListener("submit", (event) => {
+    const message = event.target.dataset.confirm;
+    if (message && !confirm(message)) event.preventDefault();
+  });
 
   document.addEventListener("click", (event) => {
     const seg = event.target.closest(".seg button");

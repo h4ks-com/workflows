@@ -1,9 +1,11 @@
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from conftest import FakeProber, log_in, make_job, make_user, queue_job
+from test_admin import MINIO_ENDPOINT, FakeStorage, with_storage
 from workflows.db import ExternalIdentity, JsonObject
 from workflows.jobs import LogEvent, StepEvent, apply_event, start, succeed
 from workflows.state import Services
@@ -11,6 +13,19 @@ from workflows.state import Services
 
 def csrf_from(html: str) -> str:
     return html.split('name="csrf_token" value="')[1].split('"')[0]
+
+
+def test_html_pages_are_not_cached(client: TestClient) -> None:
+    response = client.get("/")
+
+    assert response.headers["cache-control"] == "no-store"
+
+
+def test_static_files_are_not_marked_no_store(client: TestClient) -> None:
+    response = client.get("/static/app.js")
+
+    assert response.status_code == 200
+    assert response.headers.get("cache-control") != "no-store"
 
 
 def test_home_page_lists_queue_and_types_logged_out(client: TestClient) -> None:
@@ -480,3 +495,107 @@ def test_job_page_offers_to_run_it_again(
     job = make_job(session, services, None)
 
     assert f"/order/song?from={job.id}" in client.get(f"/jobs/{job.id}").text
+
+
+def test_admin_page_lists_jobs_with_actions(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    log_in(client, make_user(session, "root"))
+    alice = make_user(session, "alice")
+    job = queue_job(session, services, alice)
+
+    response = client.get("/admin")
+
+    assert response.status_code == 200
+    assert f"/jobs/{job.id}" in response.text
+    assert "cancel and refund" in response.text
+    assert 'placeholder="job id"' not in response.text
+
+
+def test_admin_page_offers_remove_files_for_jobs_with_results(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    log_in(client, make_user(session, "root"))
+    job = queue_job(session, services, make_user(session, "alice"))
+    start(job)
+    succeed(session, job, {"files": [{"url": "x", "name": "x", "mime": "audio/mpeg"}]})
+    session.commit()
+
+    response = client.get("/admin")
+
+    assert f'action="/admin/jobs/{job.id}/remove"' in response.text
+    assert "remove files" in response.text
+
+
+def test_admin_removes_job_files_via_web_form(
+    client: TestClient, session: Session, services: Services, app: FastAPI
+) -> None:
+    storage = FakeStorage()
+    with_storage(app, services, storage)
+    log_in(client, make_user(session, "root"))
+    job = queue_job(session, services, make_user(session, "alice"))
+    start(job)
+    succeed(
+        session,
+        job,
+        {"files": [{"url": f"https://{MINIO_ENDPOINT}/workflows/x.mp3", "name": "x", "mime": "x"}]},
+    )
+    session.commit()
+    page = client.get("/admin")
+
+    response = client.post(
+        f"/admin/jobs/{job.id}/remove",
+        data={"csrf_token": csrf_from(page.text)},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    session.expire_all()
+    assert job.removed_at is not None
+    assert storage.removed == [("workflows", "x.mp3")]
+
+
+def test_admin_remove_job_files_without_storage_renders_error(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    log_in(client, make_user(session, "root"))
+    job = queue_job(session, services, make_user(session, "alice"))
+    start(job)
+    succeed(session, job, {"files": [{"url": "x", "name": "x", "mime": "x"}]})
+    session.commit()
+    page = client.get("/admin")
+
+    response = client.post(
+        f"/admin/jobs/{job.id}/remove", data={"csrf_token": csrf_from(page.text)}
+    )
+
+    assert response.status_code == 409
+    assert "storage is not configured" in response.text
+
+
+def test_removed_job_hides_result_and_home_feed(
+    client: TestClient, session: Session, services: Services, app: FastAPI
+) -> None:
+    storage = FakeStorage()
+    with_storage(app, services, storage)
+    job = queue_job(session, services, make_user(session, "alice"))
+    start(job)
+    succeed(
+        session,
+        job,
+        {"files": [{"url": f"https://{MINIO_ENDPOINT}/workflows/x.mp3", "name": "x", "mime": "x"}]},
+    )
+    session.commit()
+    log_in(client, make_user(session, "root"))
+    page = client.get("/admin")
+    client.post(
+        f"/admin/jobs/{job.id}/remove",
+        data={"csrf_token": csrf_from(page.text)},
+        follow_redirects=False,
+    )
+
+    job_page = client.get(f"/jobs/{job.id}")
+    home = client.get("/")
+
+    assert "removed by an admin" in job_page.text
+    assert f"/jobs/{job.id}" not in home.text

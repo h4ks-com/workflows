@@ -17,6 +17,7 @@ dependencies = [
     "sse-starlette==3.4.11",
     "fastmcp==4.0.5",
     "python-multipart==0.0.32",
+    "minio>=7.2.20",
 ]
 
 [dependency-groups]

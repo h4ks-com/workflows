@@ -11,6 +11,7 @@ from workflows.beans import BeansPoller
 from workflows.bus import EventBus
 from workflows.jobtypes import JobType, Prober
 from workflows.settings import Settings
+from workflows.storage import Storage
 from workflows.worker import QueueWorker
 
 
@@ -25,6 +26,7 @@ class Services:
     http: httpx.AsyncClient
     oauth: OAuth | None
     beans_poller: BeansPoller | None
+    storage: Storage | None
 
 
 def get_services(request: Request) -> Services:

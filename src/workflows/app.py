@@ -25,6 +25,7 @@ from workflows.login import router as login_router
 from workflows.mcp import build_mcp
 from workflows.settings import Settings, load_settings
 from workflows.state import AppServices, Services
+from workflows.storage import build_storage
 from workflows.webhooks import WEBHOOK_TIMEOUT_SECONDS, WebhookNotifier
 from workflows.worker import QueueWorker
 
@@ -63,6 +64,9 @@ async def _security_headers(
 ) -> Response:
     response = await call_next(request)
     response.headers.update(SECURITY_HEADERS)
+    is_html = response.headers.get("content-type", "").startswith("text/html")
+    if is_html and not request.url.path.startswith("/static"):
+        response.headers["Cache-Control"] = "no-store"
     return response
 
 
@@ -141,6 +145,7 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
         http=http,
         oauth=build_oauth(settings),
         beans_poller=beans_poller,
+        storage=build_storage(settings),
     )
     mcp = build_mcp(services)
     mcp_app = mcp.http_app(path="/", stateless_http=True)
