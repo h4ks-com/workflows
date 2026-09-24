@@ -116,6 +116,8 @@ h2 { font-size: 18px; }
 .field small { color: var(--dim); font-size: 12px; }
 input, select, textarea { font: 14px var(--sans); color: var(--text); background: var(--bg); border: 1px solid var(--border); padding: 10px 12px; width: 100%; }
 textarea { min-height: 96px; resize: vertical; font-family: var(--mono); font-size: 13px; }
+.upload { display: flex; gap: 8px; }
+.upload input[type=url] { flex: 1; min-width: 0; }
 .seg { display: flex; border: 1px solid var(--border); }
 .seg button { flex: 1; font: 500 12px var(--mono); padding: 9px 8px; background: transparent; color: var(--mid); border: 0; border-left: 1px solid var(--border); cursor: pointer; }
 .seg button:first-child { border-left: 0; }

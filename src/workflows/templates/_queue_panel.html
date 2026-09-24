@@ -44,7 +44,7 @@
     <div class="cards">
       {% for t in types %}
       {% if t.available %}
-      <a class="type" href="/order/{{ t.name }}"><span class="glyph">~/{{ t.name }}</span><p>{{ t.description }}</p><span class="price">{{ t.pricing }}</span></a>
+      <a class="type" href="/order/{{ t.name }}"><span class="glyph">~/{{ t.name }}</span><p>{{ t.description }}</p></a>
       {% else %}
       <div class="type soon"><span class="glyph">~/{{ t.name }}</span><p>{{ t.description }}</p><span class="price">not available yet</span></div>
       {% endif %}

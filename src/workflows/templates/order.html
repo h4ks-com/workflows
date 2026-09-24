@@ -28,6 +28,11 @@
     <label class="row" style="font:13px var(--mono);color:var(--mid)"><input type="checkbox" name="{{ f.name }}" style="width:auto" {% if f.default %}checked{% endif %}> {{ f.description }}</label>
     {% elif f.kind == "number" %}
     <input id="f-{{ f.name }}" type="number" name="{{ f.name }}" value="{{ f.default }}" {% if f.minimum is not none %}min="{{ f.minimum|int }}"{% endif %} {% if f.maximum is not none %}max="{{ f.maximum|int }}"{% endif %}>
+    {% elif f.accept %}
+    <div class="upload">
+      <input id="f-{{ f.name }}" type="url" name="{{ f.name }}" value="{{ f.default or '' }}" placeholder="https://">
+      <label class="btn ghost">upload<input type="file" accept="{{ f.accept }}" data-upload-for="f-{{ f.name }}" hidden></label>
+    </div>
     {% else %}
     <input id="f-{{ f.name }}" type="text" name="{{ f.name }}" value="{{ f.default or '' }}">
     {% endif %}
@@ -35,7 +40,7 @@
   </div>
   {% endfor %}
 </div>
-<aside class="panel quote" id="quote-panel" aria-label="price">
+<aside class="panel quote" id="quote-panel" aria-label="cost">
   {% include "_quote_panel.html" %}
 </aside>
 </form>

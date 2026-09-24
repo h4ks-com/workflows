@@ -9,7 +9,7 @@
   </div>
   <div class="kv" style="min-width:220px">
     {% if detail.eta_seconds is not none %}<span>time left</span><span data-eta="{{ detail.eta_seconds }}">~{{ panel.eta_label }}</span>{% endif %}
-    <span>price</span><span>{{ detail.quote }} credits</span>
+    <span>cost</span><span>{{ detail.quote }} credits</span>
     {% if detail.status == 'queued' and detail.position is not none %}<span>place in line</span><span>#{{ detail.position }}</span>{% endif %}
   </div>
 </div>

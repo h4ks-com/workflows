@@ -1,4 +1,4 @@
-<span class="label">price</span>
+<span class="label">cost</span>
 {% if error %}
 <p class="muted">{{ error }}</p>
 <button type="submit" class="btn" disabled>submit</button>
@@ -9,13 +9,13 @@
   <span>length</span><span>{{ (quote.probe.duration_seconds // 60)|int }}:{{ "%02d"|format(quote.probe.duration_seconds % 60) }}</span>
   <span>title</span><span>{{ quote.probe.title }}</span>
   {% endif %}
-  <span>pricing</span><span>{{ job_type.pricing }}</span>
+  <span>takes about</span><span>{{ ((quote.estimate_seconds + 59) // 60)|int }} min</span>
   <span>in beans</span><span>{{ quote.beans }}</span>
   <span class="total">total</span><span class="total">{{ quote.credits }} credits</span>
 </div>
 <button type="submit" class="btn">submit · {{ quote.credits }} credits</button>
 <small class="muted">you get a full refund if it fails.</small>
 {% else %}
-<p class="muted">fill in the form to see your price.</p>
+<p class="muted">fill in the form to see the cost.</p>
 <button type="submit" class="btn" disabled>submit</button>
 {% endif %}

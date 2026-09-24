@@ -42,7 +42,8 @@ TOO_LARGE = "the request body is over 256 KB"
 SECURITY_HEADERS = {
     "Content-Security-Policy": (
         "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; "
+        "font-src https://fonts.gstatic.com; script-src 'self'; "
+        "connect-src 'self' https://s.t3ks.com; "
         "img-src 'self' data:; media-src 'self' https://s3-api.t3ks.com; "
         "frame-ancestors 'none'; base-uri 'none'; form-action 'self' https://beans.h4ks.com"
     ),

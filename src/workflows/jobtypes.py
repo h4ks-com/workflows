@@ -19,6 +19,8 @@ LONG_TEXT = 2000
 LYRICS_TEXT = 6000
 TEXTAREA = "textarea"
 MULTILINE: JsonDict = {"format": TEXTAREA}
+UPLOAD = "x-upload"
+MEDIA_UPLOAD: JsonDict = {UPLOAD: "audio/*,video/*"}
 
 
 class ProbeError(Exception):
@@ -92,9 +94,17 @@ class JobParams(BaseModel, ABC):
 
 
 class ParodyParams(JobParams):
+    prompt: str | None = Field(
+        None,
+        max_length=LONG_TEXT,
+        json_schema_extra=MULTILINE,
+        title="Prompt",
+        description="What the new lyrics should be about.",
+    )
     url: HttpUrl = Field(
-        title="Song link",
-        description="Link to the song: YouTube, SoundCloud or a direct audio file.",
+        title="Song",
+        json_schema_extra=MEDIA_UPLOAD,
+        description="Link to the song (YouTube, SoundCloud, an audio file) or upload one.",
     )
     lyrics: str | None = Field(
         None,
@@ -108,14 +118,7 @@ class ParodyParams(JobParams):
         max_length=LYRICS_TEXT,
         json_schema_extra=MULTILINE,
         title="New lyrics",
-        description="Your new lyrics, line by line. Leave empty to write them from the idea.",
-    )
-    idea: str | None = Field(
-        None,
-        max_length=LONG_TEXT,
-        json_schema_extra=MULTILINE,
-        title="Idea",
-        description="What the new lyrics should be about.",
+        description="Your new lyrics, line by line. Leave empty to write them from the prompt.",
     )
     amount: Literal["a few words", "most lines", "every line"] = Field(
         "most lines", title="How much to change", description="How much of the lyrics to replace."
@@ -137,7 +140,7 @@ class SongParams(JobParams):
         min_length=1,
         max_length=LONG_TEXT,
         json_schema_extra=MULTILINE,
-        title="Description",
+        title="Prompt",
         description="What the song should be about.",
     )
     lyrics: str | None = Field(
@@ -169,10 +172,14 @@ class SongParams(JobParams):
 
 class VoiceParams(JobParams):
     url: HttpUrl = Field(
-        title="Song link", description="Link to the song whose voice you want to replace."
+        title="Song",
+        json_schema_extra=MEDIA_UPLOAD,
+        description="Link to the song whose voice you want to replace, or upload one.",
     )
     voice_url: HttpUrl = Field(
-        title="Voice link", description="Link to a recording of the new voice. A song works too."
+        title="New voice",
+        json_schema_extra=MEDIA_UPLOAD,
+        description="Link to a recording of the new voice, or upload one. A song works too.",
     )
 
     def media_url(self) -> str:
@@ -187,7 +194,7 @@ class PodcastParams(JobParams):
         min_length=1,
         max_length=LONG_TEXT,
         json_schema_extra=MULTILINE,
-        title="Topic",
+        title="Prompt",
         description="What the episode should be about.",
     )
     minutes: int = Field(6, ge=2, le=15, title="Length (minutes)", description="Length in minutes.")

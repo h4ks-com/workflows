@@ -10,7 +10,7 @@
   {% if job.identity %}<div class="notice warn">requested by <b>{{ job.identity }}</b>. confirm only if you asked for this job.</div>{% endif %}
   <div class="kv">
     {% for name, value in job.params.items() %}<span>{{ name }}</span><span>{{ value }}</span>{% endfor %}
-    <span class="total">price</span><span class="total">{{ job.quote }} credits</span>
+    <span class="total">cost</span><span class="total">{{ job.quote }} credits</span>
   </div>
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
