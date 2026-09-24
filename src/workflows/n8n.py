@@ -1,5 +1,6 @@
 import logging
 import re
+from html import unescape
 from typing import Literal
 
 import httpx
@@ -20,6 +21,7 @@ WEBHOOK_NODE = "n8n-nodes-base.webhook"
 FORM_NODE = "n8n-nodes-base.formTrigger"
 STICKY_NODE = "n8n-nodes-base.stickyNote"
 MANIFEST_BLOCK = re.compile(r"```" + TAG + r"\s*\n(.*?)```", re.DOTALL)
+HTML_TAG = re.compile(r"<[^>]*>")
 NAME_PATTERN = r"^[a-z][a-z0-9-]*$"
 WEBHOOK_PREFIX = "workflows-"
 DEFAULT_STEP = ("run", 1)
@@ -36,6 +38,7 @@ class N8nNode(BaseModel):
     type: str
     parameters: JsonObject = Field(default_factory=dict)
     disabled: bool = False
+    notes: str = ""
 
 
 class N8nWorkflow(BaseModel):
@@ -67,6 +70,7 @@ class FormElement(BaseModel):
     requiredField: bool = False
     multiselect: bool = False
     acceptFileTypes: str | None = None
+    html: str | None = None
     fieldOptions: FormOptions = Field(default_factory=FormOptions)
 
 
@@ -113,19 +117,24 @@ def _live_form(workflow: N8nWorkflow) -> N8nNode:
     return form_node
 
 
-def _manifest(workflow: N8nWorkflow) -> Manifest:
+def _parse_manifest(text: str) -> Manifest:
+    block = MANIFEST_BLOCK.search(text)
+    try:
+        return Manifest.model_validate_json(block.group(1) if block else text)
+    except ValidationError as error:
+        raise N8nWorkflowError(f"its settings are invalid: {error}") from error
+
+
+def _manifest(workflow: N8nWorkflow, form_node: N8nNode) -> Manifest:
+    if form_node.notes.strip():
+        return _parse_manifest(form_node.notes)
     for node in workflow.nodes:
         content = node.parameters.get("content")
         if node.type != STICKY_NODE or not isinstance(content, str):
             continue
-        block = MANIFEST_BLOCK.search(content)
-        if block is None:
-            continue
-        try:
-            return Manifest.model_validate_json(block.group(1))
-        except ValidationError as error:
-            raise N8nWorkflowError(f"its manifest is invalid: {error}") from error
-    raise N8nWorkflowError(f"it has no sticky note with a {TAG} block")
+        if MANIFEST_BLOCK.search(content):
+            return _parse_manifest(content)
+    raise N8nWorkflowError("its Job Form has no settings in its Notes; add at least the price")
 
 
 def _kind_and_type(element: FormElement, override: FieldOverride) -> tuple[FieldKind, ValueType]:
@@ -167,7 +176,25 @@ def _lengths(
     return (1 if required else None), (TEXTAREA_LIMIT if kind == "textarea" else TEXT_LIMIT)
 
 
-def _field(element: FormElement, override: FieldOverride) -> FieldSpec:
+def _help_texts(elements: list[FormElement]) -> dict[str, str]:
+    help_texts: dict[str, str] = {}
+    previous: str | None = None
+    for element in elements:
+        if element.fieldType == "html" and previous and element.html:
+            help_texts[previous] = " ".join(unescape(HTML_TAG.sub(" ", element.html)).split())
+        elif element.fieldType not in ("html", "hiddenField"):
+            previous = element.fieldName
+    return help_texts
+
+
+def _description(element: FormElement, override: FieldOverride, help_text: str | None) -> str:
+    options = element.fieldOptions.values
+    single_checkbox = element.fieldType == "checkbox" and len(options) == 1
+    option_text = options[0].option if single_checkbox else None
+    return override.description or help_text or element.placeholder or option_text or ""
+
+
+def _field(element: FormElement, override: FieldOverride, help_text: str | None) -> FieldSpec:
     if not element.fieldName:
         raise N8nWorkflowError(f"the field {element.fieldLabel} has no field name")
     if element.multiselect:
@@ -178,7 +205,7 @@ def _field(element: FormElement, override: FieldOverride) -> FieldSpec:
     return FieldSpec(
         name=element.fieldName,
         label=element.fieldLabel or element.fieldName,
-        description=override.description or element.placeholder or "",
+        description=_description(element, override, help_text),
         kind=kind,
         required=element.requiredField,
         value_type=value_type,
@@ -201,8 +228,13 @@ def _form(name: str, form_node: N8nNode, manifest: Manifest) -> Form:
     shown = [
         element for element in parsed.values if element.fieldType not in ("html", "hiddenField")
     ]
+    help_texts = _help_texts(parsed.values)
     fields = tuple(
-        _field(element, manifest.fields.get(element.fieldName or "", FieldOverride()))
+        _field(
+            element,
+            manifest.fields.get(element.fieldName or "", FieldOverride()),
+            help_texts.get(element.fieldName or ""),
+        )
         for element in shown
     )
     unknown = set(manifest.fields) - {spec.name for spec in fields}
@@ -278,13 +310,13 @@ class N8nProvider:
             raise ProviderError(f"could not list n8n workflows: {error}") from error
 
     def _job_type(self, workflow: N8nWorkflow) -> tuple[int, JobType]:
-        manifest = _manifest(workflow)
+        form_node = _live_form(workflow)
+        manifest = _manifest(workflow, form_node)
         webhook = _node(workflow, WEBHOOK_NODE, enabled_only=True)
         path = webhook.parameters.get("path")
         if not isinstance(path, str) or not path:
             raise N8nWorkflowError("its webhook has no path")
         name = manifest.name or _name_from_path(path)
-        form_node = _live_form(workflow)
         title = form_node.parameters.get("formTitle")
         description = form_node.parameters.get("formDescription")
         form = _form(name, form_node, manifest)

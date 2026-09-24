@@ -162,8 +162,8 @@ async def test_discover_follows_the_cursor() -> None:
         ({"price": "open('x')"}, "only call allowed"),
         ({"price": "[40]"}, "not allowed"),
         ({"fields": {"nope": {"description": "x"}}}, "nope"),
-        ({"steps": []}, "manifest is invalid"),
-        ({"surprise": True}, "manifest is invalid"),
+        ({"steps": []}, "settings are invalid"),
+        ({"surprise": True}, "settings are invalid"),
     ],
 )
 async def test_discover_skips_broken_workflows_and_reports_why(
