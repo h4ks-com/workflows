@@ -91,7 +91,6 @@ def test_submit_job_rejects_invalid_webhooks(client: TestClient, webhook: JsonOb
 @pytest.mark.parametrize(
     ("status", "text", "result_urls"),
     [
-        (JobStatus.QUEUED, "is in line", []),
         (JobStatus.RUNNING, "started: {run_url}", []),
         (JobStatus.SUCCEEDED, "is done: " + " ".join(FILE_URLS), FILE_URLS),
         (JobStatus.FAILED, "failed: the executor crashed ({run_url})", []),

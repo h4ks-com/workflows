@@ -19,7 +19,6 @@ WEBHOOK_TIMEOUT_SECONDS = 10.0
 RETRY_DELAYS_SECONDS = (1.0, 4.0, 16.0)
 NOTIFIED_STATUSES = frozenset(
     {
-        JobStatus.QUEUED,
         JobStatus.RUNNING,
         JobStatus.SUCCEEDED,
         JobStatus.FAILED,
@@ -60,8 +59,6 @@ class Delivery:
 
 def describe(job: Job, status: JobStatus, run_url: str, result_urls: list[str]) -> str:
     match status:
-        case JobStatus.QUEUED:
-            return "is in line"
         case JobStatus.RUNNING:
             return f"started: {run_url}"
         case JobStatus.SUCCEEDED:
