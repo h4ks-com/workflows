@@ -13,7 +13,7 @@
       <span>cost</span><span>{{ detail.quote }} credits</span>
       {% if detail.status == 'queued' and detail.position is not none %}<span>place in line</span><span>#{{ detail.position }}</span>{% endif %}
     </div>
-    {% if job_type.available %}<a class="btn" href="/order/{{ detail.type }}?from={{ detail.id }}">✎ edit and run again</a>{% endif %}
+    {% if job_type.available %}<a class="btn" href="/order/{{ detail.type }}?from={{ detail.id }}">edit and run again</a>{% endif %}
   </div>
 </div>
 

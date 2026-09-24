@@ -5,7 +5,9 @@ from pathlib import Path
 from pydantic import JsonValue
 from sqlalchemy import (
     JSON,
+    Column,
     DateTime,
+    DefaultClause,
     Dialect,
     Engine,
     ForeignKey,
@@ -127,7 +129,7 @@ class Job(Base):
     last_event_at: Mapped[datetime | None]
     removed_at: Mapped[datetime | None]
 
-    owner: Mapped[User | None] = relationship()
+    owner: Mapped[User | None] = relationship(lazy="joined")
     events: Mapped[list[JobEvent]] = relationship(order_by="JobEvent.id")
 
 
@@ -177,10 +179,16 @@ def _add_missing_columns(engine: Engine) -> None:
             for column in table.columns:
                 if column.name in existing_columns:
                     continue
-                column_type = column.type.compile(dialect=engine.dialect)
-                connection.execute(
-                    text(f"ALTER TABLE {table.name} ADD COLUMN {column.name} {column_type}")
-                )
+                connection.execute(text(_add_column_sql(engine, table.name, column)))
+
+
+def _add_column_sql[T](engine: Engine, table_name: str, column: Column[T]) -> str:
+    column_type = column.type.compile(dialect=engine.dialect)
+    sql = f"ALTER TABLE {table_name} ADD COLUMN {column.name} {column_type}"
+    if isinstance(column.server_default, DefaultClause):
+        default = column.server_default.arg
+        sql += f" DEFAULT '{default}'" if isinstance(default, str) else f" DEFAULT {default}"
+    return sql
 
 
 def connect(database_url: str) -> Engine:

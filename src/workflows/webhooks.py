@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from workflows.bus import QUEUE_TOPIC, EventBus
 from workflows.db import Job, JobStatus, JsonObject, Subscription
-from workflows.jobs import STATUS_EVENT, ResultFile, job_type_for, one_line
+from workflows.jobs import STATUS_EVENT, StoredResult, job_type_for, one_line
 from workflows.jobtypes import JobType
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,10 @@ ShortStr = Annotated[str, Field(max_length=200)]
 class Webhook(BaseModel):
     url: HttpUrl = Field(description="URL that receives a POST on every status change.")
     token: str = Field(
-        min_length=1, max_length=500, description="Sent back as `Authorization: Bearer <token>`."
+        min_length=1,
+        max_length=500,
+        pattern=r"^[\x21-\x7e]+$",
+        description="Printable ASCII token sent back as `Authorization: Bearer <token>`.",
     )
     extra_params: dict[ShortStr, ShortStr] = Field(
         default_factory=dict, max_length=10, description="Fields merged into every payload as-is."
@@ -57,10 +60,6 @@ class Subscribe(BaseModel):
 class StatusChange(BaseModel):
     job_id: int
     status: JobStatus
-
-
-class ResultFiles(BaseModel):
-    files: list[ResultFile]
 
 
 @dataclass(frozen=True)
@@ -131,7 +130,7 @@ def describe(job: Job, status: JobStatus, run_url: str, result_urls: list[str]) 
 def result_urls(job: Job, status: JobStatus) -> list[str]:
     if status != JobStatus.SUCCEEDED or job.result is None:
         return []
-    return [file.url for file in ResultFiles.model_validate(job.result).files]
+    return [file.url for file in StoredResult.model_validate(job.result).files]
 
 
 class WebhookNotifier:

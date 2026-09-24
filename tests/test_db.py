@@ -1,8 +1,17 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import Column, Integer, create_engine, inspect, text
 
-from workflows.db import _add_missing_columns, connect
+from workflows.db import _add_column_sql, _add_missing_columns, connect
+
+
+def test_add_column_sql_keeps_the_server_default() -> None:
+    engine = create_engine("sqlite://")
+    column = Column("tries", Integer, server_default="0")
+    assert (
+        _add_column_sql(engine, "jobs", column)
+        == "ALTER TABLE jobs ADD COLUMN tries INTEGER DEFAULT '0'"
+    )
 
 
 def test_add_missing_columns_adds_nullable_columns(tmp_path: Path) -> None:

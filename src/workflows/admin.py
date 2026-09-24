@@ -1,13 +1,13 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from workflows.auth import require_admin, require_fetch_header
-from workflows.db import Job, JobEvent, JsonObject, User, utcnow
-from workflows.jobs import announce, cancel, job_type_for
+from workflows.db import Job, JobEvent, User, utcnow
+from workflows.jobs import StoredResult, announce, cancel, job_type_for
 from workflows.ledger import adjust
 from workflows.state import AppServices, Db, Services
 from workflows.storage import object_location
@@ -45,7 +45,7 @@ class HealthView(BaseModel):
     )
 
 
-def _user_or_404(session: Session, username: str) -> User:
+def user_or_404(session: Session, username: str) -> User:
     user = session.scalar(select(User).where(User.username == username))
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"no user named {username}")
@@ -61,7 +61,7 @@ def cancel_job(session: Session, services: Services, job_id: int) -> Job:
 
 
 def adjust_credits(session: Session, username: str, body: AdjustCreditsRequest) -> User:
-    user = _user_or_404(session, username)
+    user = user_or_404(session, username)
     adjust(session, user, body.credits, body.note)
     session.commit()
     return user
@@ -72,36 +72,20 @@ def set_paused(services: Services, paused: bool) -> PauseView:
     return PauseView(paused=paused)
 
 
-def _file_url(file: JsonValue) -> str | None:
-    url = file.get("url") if isinstance(file, dict) else None
-    return url if isinstance(url, str) else None
-
-
-def _file_urls(result: JsonObject) -> list[str]:
-    files = result.get("files")
-    if not isinstance(files, list):
-        return []
-    return [url for file in files if (url := _file_url(file)) is not None]
-
-
-def _result_urls(result: JsonObject) -> list[str]:
-    urls = _file_urls(result)
-    metadata_url = result.get("metadata_url")
-    if isinstance(metadata_url, str):
-        urls.append(metadata_url)
-    return urls
-
-
 async def remove_job_files(session: Session, services: Services, job_id: int) -> Job:
     if services.storage is None:
         raise HTTPException(status.HTTP_409_CONFLICT, STORAGE_NOT_CONFIGURED)
     job = get_job_or_404(session, job_id)
-    for url in _result_urls(job.result or {}):
+    stored = StoredResult.model_validate(job.result) if job.result else StoredResult(files=[])
+    for url in stored.urls():
         located = object_location(services.settings.minio_endpoint, url)
         if located is not None:
             await services.storage.remove(*located)
     job.result = None
     job.removed_at = utcnow()
+    for event in job.events:
+        if event.kind == "result":
+            event.data = {}
     session.add(JobEvent(job_id=job.id, kind="log", data={"message": REMOVED_MESSAGE}))
     session.commit()
     announce(services.bus, job)

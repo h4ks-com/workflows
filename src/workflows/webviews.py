@@ -3,7 +3,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Depends, Request
 from fastapi.responses import RedirectResponse
@@ -47,7 +47,7 @@ def me_chip(settings: Settings, user: User) -> MeChip:
 class StepRow:
     name: str
     weight: int
-    state: str
+    state: Literal["todo", "now", "done"]
     pct: int
     label: str
     when: str

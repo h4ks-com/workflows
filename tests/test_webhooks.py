@@ -420,3 +420,8 @@ def test_build_delivery_keeps_the_message_on_one_line() -> None:
     hook = Webhook.model_validate({"url": HOOK_URL, "token": HOOK_TOKEN, "message_prefix": "hi:\n"})
     delivery = build_delivery("x", hook, "failed:\r\nQUIT", {})
     assert delivery.payload["message"] == "hi: failed: QUIT"
+
+
+def test_webhook_token_must_be_printable_ascii() -> None:
+    with pytest.raises(ValueError, match="pattern"):
+        Webhook(url="https://hook.example", token="café")

@@ -45,7 +45,7 @@ IdentityStr = Annotated[
     str,
     Field(
         pattern=IDENTITY_PATTERN,
-        description="Opaque identity the client chooses, e.g. 'irc:mattf'. Never parsed.",
+        description="Opaque identity the client chooses, for example 'chat:alice'.",
     ),
 ]
 

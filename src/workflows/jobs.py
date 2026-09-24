@@ -36,7 +36,7 @@ CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]+")
 
 
 def one_line(text: str) -> str:
-    # Executor text reaches chat clients, where a raw newline would start a new protocol command.
+    # Clients relay this text into line-based protocols, where a newline starts a new command.
     return " ".join(CONTROL_CHARS.sub(" ", text).split())
 
 
@@ -73,6 +73,15 @@ class ResultEvent(BaseModel):
     metadata_url: HttpLink | None = Field(
         None, description="URL of the metadata JSON beside the files."
     )
+
+
+class StoredResult(BaseModel):
+    files: list[ResultFile] = Field(description="Files the job produced.")
+    metadata_url: str | None = Field(None, description="URL of the metadata JSON.")
+
+    def urls(self) -> list[str]:
+        metadata_urls = [self.metadata_url] if self.metadata_url else []
+        return [file.url for file in self.files] + metadata_urls
 
 
 class ErrorEvent(BaseModel):

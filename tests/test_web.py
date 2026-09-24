@@ -381,9 +381,9 @@ def test_order_shows_probe_failures(client: TestClient, session: Session) -> Non
         "/order/parody", data={"csrf_token": csrf_from(page.text), "url": unknown_url}
     )
 
-    assert "could not read that URL" in quote.text
+    assert "we could not read it" in quote.text
     assert response.status_code == 502
-    assert "could not read that URL" in response.text
+    assert "we could not read it" in response.text
 
 
 def test_order_page_uses_textareas_for_long_text(client: TestClient) -> None:

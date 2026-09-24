@@ -1,9 +1,12 @@
 from dataclasses import dataclass
+from typing import Literal
 
 from pydantic import JsonValue
 
 from workflows.db import JsonObject
 from workflows.jobtypes import SHOW_WHEN, TEXTAREA, UPLOAD
+
+type FieldKind = Literal["select", "checkbox", "number", "textarea", "text"]
 
 
 @dataclass(frozen=True)
@@ -11,7 +14,7 @@ class FieldSpec:
     name: str
     label: str
     description: str
-    kind: str
+    kind: FieldKind
     required: bool
     enum: tuple[str, ...] | None = None
     minimum: float | None = None
@@ -52,7 +55,7 @@ def _enum(prop: JsonObject) -> tuple[str, ...] | None:
     return None
 
 
-def _kind(prop: JsonObject, prop_type: str | None, enum: tuple[str, ...] | None) -> str:
+def _kind(prop: JsonObject, prop_type: str | None, enum: tuple[str, ...] | None) -> FieldKind:
     if enum is not None:
         return "select"
     if prop_type == "boolean":

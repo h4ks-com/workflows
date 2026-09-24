@@ -1,13 +1,12 @@
 import asyncio
 from typing import Protocol
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
 
 from minio import Minio
 from minio.error import S3Error
 
 from workflows.settings import Settings
 
-BUCKETS = ("workflows", "suno")
 MISSING_KEY_CODE = "NoSuchKey"
 
 
@@ -38,8 +37,8 @@ def object_location(endpoint: str, url: str) -> tuple[str, str] | None:
     parsed = urlsplit(url)
     if parsed.netloc != endpoint:
         return None
-    bucket, _, key = parsed.path.lstrip("/").partition("/")
-    if bucket not in BUCKETS or not key:
+    bucket, _, key = unquote(parsed.path).lstrip("/").partition("/")
+    if not bucket or not key:
         return None
     return bucket, key
 

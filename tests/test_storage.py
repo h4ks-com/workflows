@@ -13,9 +13,9 @@ ENDPOINT = "s3-api.t3ks.com"
     ("url", "expected"),
     [
         (f"https://{ENDPOINT}/workflows/song.mp3", ("workflows", "song.mp3")),
-        (f"https://{ENDPOINT}/suno/a/b.json", ("suno", "a/b.json")),
+        (f"https://{ENDPOINT}/other/a/b.json", ("other", "a/b.json")),
+        (f"https://{ENDPOINT}/workflows/My%20Song.mp3", ("workflows", "My Song.mp3")),
         ("https://other.example/workflows/song.mp3", None),
-        (f"https://{ENDPOINT}/not-a-bucket/song.mp3", None),
         (f"https://{ENDPOINT}/workflows/", None),
     ],
 )

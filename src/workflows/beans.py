@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
-from workflows.db import User, utcnow
+from workflows.db import LedgerEntry, User, utcnow
 from workflows.ledger import topup
 from workflows.settings import Settings
 
@@ -28,6 +28,15 @@ class BeansTransaction(BaseModel):
 
 
 TRANSACTIONS = TypeAdapter(list[BeansTransaction])
+
+
+def _new_topups(session: Session, transactions: list[BeansTransaction]) -> list[BeansTransaction]:
+    topups = [txn for txn in transactions if txn.to_user == WORKFLOWS_WALLET]
+    ids = [str(txn.id) for txn in topups]
+    known = set(
+        session.scalars(select(LedgerEntry.beans_txn_id).where(LedgerEntry.beans_txn_id.in_(ids)))
+    )
+    return [txn for txn in topups if str(txn.id) not in known]
 
 
 class BeansPollError(Exception):
@@ -58,7 +67,7 @@ class BeansPoller:
             logger.warning("beans poll failed: %s", error)
             return
         with self._sessions.begin() as session:
-            for transaction in transactions:
+            for transaction in _new_topups(session, transactions):
                 self._credit(session, transaction)
         self.last_success = utcnow()
 
@@ -75,8 +84,6 @@ class BeansPoller:
             raise BeansPollError(str(error)) from error
 
     def _credit(self, session: Session, transaction: BeansTransaction) -> None:
-        if transaction.to_user != WORKFLOWS_WALLET:
-            return
         user = session.scalar(select(User).where(User.username == transaction.from_user))
         if user is not None:
             topup(session, user, transaction.amount, str(transaction.id))

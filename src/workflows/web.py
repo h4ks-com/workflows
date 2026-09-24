@@ -24,11 +24,12 @@ from workflows.admin import (
     health,
     remove_job_files,
     set_paused,
+    user_or_404,
 )
 from workflows.api import QuoteRequest, get_job_type, price_request
 from workflows.auth import csrf_token, require_admin
 from workflows.db import Job, JobStatus, JsonObject, User
-from workflows.jobs import JobError, announce, create_job, enqueue, ensure_available, job_type_for
+from workflows.jobs import JobError, announce, create_job, enqueue, job_type_for
 from workflows.jobtypes import JobType, ProbeError
 from workflows.ledger import InsufficientCreditsError
 from workflows.settings import CREDITS_PER_BEAN, FREE_DAILY_CREDITS
@@ -55,7 +56,7 @@ RECENT_RESULTS = 4
 USER_JOB_LIMIT = 50
 ADMIN_RECENT_JOBS = 50
 ADMIN_JOB_FETCH = 200
-PROBE_FAILED = "could not read that URL"
+PROBE_FAILED = "check the link, we could not read it"
 FORM_INVALID = "check the form for mistakes"
 
 router = APIRouter()
@@ -157,7 +158,6 @@ async def order_submit(type_name: str, page: PageCtx) -> Response:
     if page.user is None:
         return login_redirect(f"/order/{type_name}")
     job_type = get_job_type(page.services, type_name)
-    ensure_available(job_type)
     form = await verified_form(page.request)
     return await _create_and_redirect(page, page.user, job_type, form)
 
@@ -363,9 +363,7 @@ async def admin_credits(page: PageCtx) -> Response:
 
 @router.get("/u/{username}")
 async def user_page(username: str, page: PageCtx) -> Response:
-    target = page.session.scalar(select(User).where(User.username == username))
-    if target is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"no user named {username}")
+    user_or_404(page.session, username)
     context: Context = {
         "username": username,
         "jobs": job_views(page.session, page.services, username, USER_JOB_LIMIT),

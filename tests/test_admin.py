@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from conftest import log_in, make_user, queue_job
+from workflows.db import JobEvent, JsonObject
 from workflows.jobs import start, succeed
 from workflows.state import Services
 
@@ -147,6 +148,29 @@ def test_admin_removes_job_files(
     assert job.removed_at is not None
     assert job.events[-1].kind == "log"
     assert job.events[-1].data["message"] == "removed by an admin"
+
+
+def test_admin_removal_hides_the_result_event(
+    client: TestClient, session: Session, services: Services, app: FastAPI
+) -> None:
+    with_storage(app, services, FakeStorage())
+    job = queue_job(session, services, make_user(session, "alice"))
+    start(job)
+    result: JsonObject = {
+        "files": [
+            {"url": f"https://{MINIO_ENDPOINT}/workflows/a.png", "name": "a", "mime": "image/png"}
+        ],
+        "title": "secret",
+    }
+    session.add(JobEvent(job_id=job.id, kind="result", data=result))
+    succeed(session, job, result)
+    session.commit()
+    log_in(client, make_user(session, "root"))
+
+    client.post(f"/api/admin/jobs/{job.id}/remove")
+
+    events = client.get(f"/api/jobs/{job.id}").json()["events"]
+    assert "secret" not in str(events)
 
 
 def test_admin_remove_job_files_skips_unmatched_urls(

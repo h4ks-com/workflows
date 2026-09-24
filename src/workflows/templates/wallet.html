@@ -6,7 +6,7 @@
 {% if error %}<div class="notice warn">{{ error }}</div>{% endif %}
 <div class="stats">
   <div class="stat"><span class="label">balance</span><b>{{ "{:,}".format(me.free_credits + me.paid_credits) }} credits</b><span class="muted num">= {{ "%.2f"|format((me.free_credits + me.paid_credits) / credits_per_bean) }} beans</span></div>
-  <div class="stat"><span class="label">free credits today</span><b>{{ me.free_credits }}</b><div class="meter" aria-label="{{ me.free_credits }} of {{ free_daily }} left"><i style="width:{{ (me.free_credits / free_daily * 100)|round|int }}%"></i></div><span class="muted">resets to {{ free_daily }} at midnight UTC and doesn't carry over</span></div>
+  <div class="stat"><span class="label">free credits today</span><b>{{ me.free_credits }}</b><div class="meter" aria-label="{{ me.free_credits }} of {{ free_daily }} left"><i style="width:{{ (me.free_credits / free_daily * 100)|round|int }}%"></i></div><span class="muted">resets to {{ free_daily }} at midnight UTC</span></div>
   <div class="stat"><span class="label">on hold</span><b>{{ reserved }} credits</b><span class="muted">held for jobs in line, refunded if they fail</span></div>
 </div>
 
