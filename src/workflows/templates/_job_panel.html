@@ -6,12 +6,14 @@
       {% if detail.owner %}<span class="muted">by <a href="/u/{{ detail.owner }}">{{ detail.owner }}</a></span>{% endif %}
     </div>
     <h1>{{ detail.result.title if detail.result and detail.result.title else job_type.title ~ ' #' ~ detail.id }}</h1>
-    {% if job_type.available %}<a class="btn ghost" href="/order/{{ detail.type }}?from={{ detail.id }}">edit and run again</a>{% endif %}
   </div>
-  <div class="kv" style="min-width:220px">
-    {% if detail.eta_seconds is not none %}<span>time left</span><span data-eta="{{ detail.eta_seconds }}">~{{ panel.eta_label }}</span>{% endif %}
-    <span>cost</span><span>{{ detail.quote }} credits</span>
-    {% if detail.status == 'queued' and detail.position is not none %}<span>place in line</span><span>#{{ detail.position }}</span>{% endif %}
+  <div class="run-side">
+    <div class="kv">
+      {% if detail.eta_seconds is not none %}<span>time left</span><span data-eta="{{ detail.eta_seconds }}">~{{ panel.eta_label }}</span>{% endif %}
+      <span>cost</span><span>{{ detail.quote }} credits</span>
+      {% if detail.status == 'queued' and detail.position is not none %}<span>place in line</span><span>#{{ detail.position }}</span>{% endif %}
+    </div>
+    {% if job_type.available %}<a class="btn" href="/order/{{ detail.type }}?from={{ detail.id }}">✎ edit and run again</a>{% endif %}
   </div>
 </div>
 

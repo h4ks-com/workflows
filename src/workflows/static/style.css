@@ -141,6 +141,8 @@ textarea { min-height: 96px; resize: vertical; font-family: var(--mono); font-si
 .kv .total { border-top: 1px solid var(--border); padding-top: 6px; color: var(--text) !important; }
 
 .run-head { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: end; }
+.run-side { display: grid; gap: 12px; min-width: 220px; justify-items: stretch; }
+.run-side .btn { justify-content: center; }
 .timeline { display: grid; }
 .tl { display: grid; grid-template-columns: 26px 1fr auto; gap: 12px; align-items: start; padding-block: 10px; position: relative; }
 .tl::before { content: ""; position: absolute; left: 12px; top: 30px; bottom: -10px; width: 2px; background: var(--border); }
