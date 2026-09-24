@@ -22,22 +22,23 @@
    "type": "n8n-nodes-base.formTrigger",
    "typeVersion": 2.6,
    "parameters": {
+    "authentication": "n8nUserAuth",
     "formTitle": "Image",
     "formDescription": "Create an image from a description.",
     "formFields": {
      "values": [
       {
-       "fieldName": "prompt",
        "fieldLabel": "Prompt",
-       "requiredField": true,
        "fieldType": "textarea",
-       "placeholder": "What the image should show."
+       "fieldName": "prompt",
+       "placeholder": "What the image should show.",
+       "requiredField": true
       },
       {
-       "fieldName": "model",
        "fieldLabel": "Model",
-       "requiredField": false,
        "fieldType": "dropdown",
+       "fieldName": "model",
+       "defaultValue": "z-image",
        "fieldOptions": {
         "values": [
          {
@@ -47,22 +48,28 @@
           "option": "flux-klein"
          }
         ]
-       },
-       "defaultValue": "z-image"
+       }
       },
       {
-       "fieldName": "reference_url",
+       "fieldType": "html",
+       "html": "<p>z-image looks best from a prompt; flux-klein is faster and takes a reference.</p>"
+      },
+      {
        "fieldLabel": "Reference image",
-       "requiredField": false,
        "fieldType": "file",
-       "acceptFileTypes": "image/*",
-       "multipleFiles": false
+       "fieldName": "reference_url",
+       "multipleFiles": false,
+       "acceptFileTypes": "image/*"
       },
       {
-       "fieldName": "shape",
+       "fieldType": "html",
+       "html": "<p>An image to edit or take the look from. Link, upload or drop one.</p>"
+      },
+      {
        "fieldLabel": "Shape",
-       "requiredField": false,
        "fieldType": "dropdown",
+       "fieldName": "shape",
+       "defaultValue": "square",
        "fieldOptions": {
         "values": [
          {
@@ -75,14 +82,17 @@
           "option": "landscape"
          }
         ]
-       },
-       "defaultValue": "square"
+       }
       },
       {
-       "fieldName": "size",
+       "fieldType": "html",
+       "html": "<p>Shape of the image.</p>"
+      },
+      {
        "fieldLabel": "Size",
-       "requiredField": false,
        "fieldType": "dropdown",
+       "fieldName": "size",
+       "defaultValue": "normal",
        "fieldOptions": {
         "values": [
          {
@@ -92,36 +102,26 @@
           "option": "large"
          }
         ]
-       },
-       "defaultValue": "normal"
+       }
+      },
+      {
+       "fieldType": "html",
+       "html": "<p>normal is about 1 megapixel; large is about 2.3 and costs double.</p>"
       }
      ]
     },
     "options": {
-     "path": "workflows-image-form",
      "appendAttribution": false,
+     "path": "workflows-image-form",
      "respondWithOptions": {
       "values": {
-       "respondWith": "text",
        "formSubmittedText": "Started. Open the execution in n8n to follow it; results land in the workflows bucket."
       }
      }
-    },
-    "authentication": "n8nUserAuth",
-    "responseMode": "onReceived"
+    }
    },
-   "disabled": false
-  },
-  {
-   "name": "h4ks workflows manifest",
-   "type": "n8n-nodes-base.stickyNote",
-   "typeVersion": 1,
-   "parameters": {
-    "width": 520,
-    "height": 560,
-    "color": 4,
-    "content": "## h4ks workflows\nThe disabled Job Form defines the form on workflows.h4ks.com; this note adds what n8n forms cannot hold. See n8n/README.md in h4ks-com/workflows.\n```h4ks-workflows\n{\n  \"pricing\": \"40 credits per image, 80 for large\",\n  \"price\": \"80 if size == 'large' else 40\",\n  \"steps\": [[\"generate\", 85], [\"store\", 15]],\n  \"position\": 4,\n  \"fields\": {\n    \"model\": {\"description\": \"z-image looks best from a prompt; flux-klein is faster and takes a reference.\"},\n    \"reference_url\": {\"description\": \"An image to edit or take the look from. Link, upload or drop one.\", \"show_when\": {\"model\": \"flux-klein\"}},\n    \"shape\": {\"description\": \"Shape of the image.\"},\n    \"size\": {\"description\": \"normal is about 1 megapixel; large is about 2.3 and costs double.\"}\n  }\n}\n```"
-   }
+   "notes": "{\n  \"pricing\": \"40 credits per image, 80 for large\",\n  \"price\": \"80 if size == 'large' else 40\",\n  \"steps\": [[\"generate\", 85], [\"store\", 15]],\n  \"position\": 4,\n  \"fields\": {\n    \"reference_url\": {\"show_when\": {\"model\": \"flux-klein\"}}\n  }\n}",
+   "notesInFlow": true
   }
  ],
  "connections": {

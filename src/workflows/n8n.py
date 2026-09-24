@@ -19,8 +19,6 @@ LIST_TIMEOUT_SECONDS = 15.0
 PAGE_SIZE = 100
 WEBHOOK_NODE = "n8n-nodes-base.webhook"
 FORM_NODE = "n8n-nodes-base.formTrigger"
-STICKY_NODE = "n8n-nodes-base.stickyNote"
-MANIFEST_BLOCK = re.compile(r"```" + TAG + r"\s*\n(.*?)```", re.DOTALL)
 HTML_TAG = re.compile(r"<[^>]*>")
 NAME_PATTERN = r"^[a-z][a-z0-9-]*$"
 WEBHOOK_PREFIX = "workflows-"
@@ -117,24 +115,13 @@ def _live_form(workflow: N8nWorkflow) -> N8nNode:
     return form_node
 
 
-def _parse_manifest(text: str) -> Manifest:
-    block = MANIFEST_BLOCK.search(text)
+def _manifest(form_node: N8nNode) -> Manifest:
+    if not form_node.notes.strip():
+        raise N8nWorkflowError("its Job Form has no settings in its Notes; add at least the price")
     try:
-        return Manifest.model_validate_json(block.group(1) if block else text)
+        return Manifest.model_validate_json(form_node.notes)
     except ValidationError as error:
         raise N8nWorkflowError(f"its settings are invalid: {error}") from error
-
-
-def _manifest(workflow: N8nWorkflow, form_node: N8nNode) -> Manifest:
-    if form_node.notes.strip():
-        return _parse_manifest(form_node.notes)
-    for node in workflow.nodes:
-        content = node.parameters.get("content")
-        if node.type != STICKY_NODE or not isinstance(content, str):
-            continue
-        if MANIFEST_BLOCK.search(content):
-            return _parse_manifest(content)
-    raise N8nWorkflowError("its Job Form has no settings in its Notes; add at least the price")
 
 
 def _kind_and_type(element: FormElement, override: FieldOverride) -> tuple[FieldKind, ValueType]:
@@ -246,7 +233,9 @@ def _form(name: str, form_node: N8nNode, manifest: Manifest) -> Form:
 def _name_from_path(path: str) -> str:
     name = path.removeprefix(WEBHOOK_PREFIX)
     if not re.fullmatch(NAME_PATTERN, name):
-        raise N8nWorkflowError(f"its webhook path {path} makes no valid name; set one in the note")
+        raise N8nWorkflowError(
+            f"its webhook path {path} makes no valid name; set one in the Job Form's Notes"
+        )
     return name
 
 
@@ -311,7 +300,7 @@ class N8nProvider:
 
     def _job_type(self, workflow: N8nWorkflow) -> tuple[int, JobType]:
         form_node = _live_form(workflow)
-        manifest = _manifest(workflow, form_node)
+        manifest = _manifest(form_node)
         webhook = _node(workflow, WEBHOOK_NODE, enabled_only=True)
         path = webhook.parameters.get("path")
         if not isinstance(path, str) or not path:

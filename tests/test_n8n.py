@@ -5,6 +5,7 @@ from pathlib import Path
 import httpx
 import pytest
 import respx
+from pydantic import JsonValue
 
 from workflows.builtin import builtin_job_types
 from workflows.catalog import Catalog, HttpExecutor, ProviderError
@@ -32,15 +33,68 @@ def node(workflow: JsonObject, node_type: str) -> JsonObject:
 
 def with_manifest(change: dict[str, object], replace: bool = False) -> JsonObject:
     workflow = copy.deepcopy(IMAGE_WORKFLOW)
-    sticky = node(workflow, "n8n-nodes-base.stickyNote")
-    parameters = sticky["parameters"]
-    assert isinstance(parameters, dict)
-    content = str(parameters["content"])
-    start = content.index("{")
-    end = content.rindex("}") + 1
-    manifest = change if replace else json.loads(content[start:end]) | change
-    parameters["content"] = content[:start] + json.dumps(manifest) + content[end:]
+    form = node(workflow, "n8n-nodes-base.formTrigger")
+    manifest = change if replace else json.loads(str(form["notes"])) | change
+    form["notes"] = json.dumps(manifest)
     return workflow
+
+
+def with_form_fields(fields: list[JsonValue]) -> JsonObject:
+    workflow = copy.deepcopy(IMAGE_WORKFLOW)
+    form = node(workflow, "n8n-nodes-base.formTrigger")
+    form["parameters"] = {
+        "authentication": "n8nUserAuth",
+        "formTitle": "Echo",
+        "formFields": {"values": fields},
+    }
+    form["notes"] = json.dumps({"price": "1"})
+    return workflow
+
+
+@respx.mock
+async def test_html_after_a_field_is_its_help_text() -> None:
+    fields: list[JsonValue] = [
+        {
+            "fieldType": "dropdown",
+            "fieldName": "mood",
+            "fieldLabel": "Mood",
+            "fieldOptions": {"values": [{"option": "calm"}]},
+        },
+        {"fieldType": "html", "html": "<p>How it <b>sounds</b> &amp; feels.</p>"},
+        {
+            "fieldType": "checkbox",
+            "fieldName": "loud",
+            "fieldLabel": "Loud",
+            "fieldOptions": {"values": [{"option": "Make it loud."}]},
+        },
+        {
+            "fieldType": "text",
+            "fieldName": "note",
+            "fieldLabel": "Note",
+            "placeholder": "Anything else.",
+        },
+    ]
+    respx.get(LIST_URL).respond(json={"data": [with_form_fields(fields)], "nextCursor": None})
+
+    [echo] = await provider().discover()
+
+    descriptions = {spec.name: spec.description for spec in echo.form.fields}
+    assert descriptions == {
+        "mood": "How it sounds & feels.",
+        "loud": "Make it loud.",
+        "note": "Anything else.",
+    }
+
+
+@respx.mock
+async def test_a_form_without_notes_is_skipped() -> None:
+    workflow = copy.deepcopy(IMAGE_WORKFLOW)
+    node(workflow, "n8n-nodes-base.formTrigger")["notes"] = ""
+    respx.get(LIST_URL).respond(json={"data": [workflow], "nextCursor": None})
+    n8n = provider()
+
+    assert await n8n.discover() == []
+    assert "no settings in its Notes" in n8n.errors[str(IMAGE_WORKFLOW["name"])]
 
 
 @respx.mock
@@ -177,12 +231,10 @@ async def test_discover_skips_broken_workflows_and_reports_why(
 
 
 @respx.mock
-async def test_discover_skips_a_workflow_without_a_webhook_or_manifest() -> None:
+async def test_discover_skips_a_workflow_without_a_webhook() -> None:
     no_webhook = copy.deepcopy(IMAGE_WORKFLOW)
     node(no_webhook, "n8n-nodes-base.webhook")["disabled"] = True
-    no_manifest = copy.deepcopy(IMAGE_WORKFLOW)
-    node(no_manifest, "n8n-nodes-base.stickyNote")["parameters"] = {"content": "just notes"}
-    respx.get(LIST_URL).respond(json={"data": [no_webhook, no_manifest], "nextCursor": None})
+    respx.get(LIST_URL).respond(json={"data": [no_webhook], "nextCursor": None})
 
     assert await provider().discover() == []
 
