@@ -115,3 +115,9 @@ async def test_ytdl_prober_runs_at_most_four_probes_at_once() -> None:
 
 def test_image_quote_is_flat() -> None:
     assert ImageParams(prompt="a cat").quote(None) == 40
+
+
+def test_image_reference_is_optional_and_uploadable() -> None:
+    schema = ImageParams.model_json_schema()["properties"]["reference_url"]
+    assert schema["x-upload"] == "image/*"
+    assert ImageParams(prompt="a cat").reference_url is None

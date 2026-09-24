@@ -216,6 +216,12 @@ class ImageParams(JobParams):
         title="Prompt",
         description="What the image should show.",
     )
+    reference_url: HttpUrl | None = Field(
+        None,
+        title="Reference image",
+        json_schema_extra={UPLOAD: "image/*"},
+        description="An image to edit or take the look from. Link, upload or drop one.",
+    )
     shape: Literal["square", "portrait", "landscape"] = Field(
         "square", title="Shape", description="Shape of the image."
     )
