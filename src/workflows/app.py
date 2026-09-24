@@ -25,6 +25,7 @@ from workflows.login import router as login_router
 from workflows.mcp import build_mcp
 from workflows.settings import Settings, load_settings
 from workflows.state import AppServices, Services
+from workflows.webhooks import WEBHOOK_TIMEOUT_SECONDS, WebhookNotifier
 from workflows.worker import QueueWorker
 
 logger = logging.getLogger(__name__)
@@ -127,6 +128,8 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
     bus = EventBus()
     worker = QueueWorker(sessions, registry, bus, http, settings)
     beans_poller = BeansPoller(sessions, http, settings) if settings.beans_token else None
+    webhook_http = httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT_SECONDS)
+    notifier = WebhookNotifier(sessions, registry, bus, webhook_http, settings.base_url)
     services = Services(
         settings=settings,
         sessions=sessions,
@@ -145,7 +148,7 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         async with AsyncExitStack() as stack:
             await stack.enter_async_context(mcp_app.lifespan(app))
-            tasks = [worker.start()]
+            tasks = [worker.start(), asyncio.create_task(notifier.run(), name="webhook notifier")]
             if beans_poller is not None:
                 tasks.append(asyncio.create_task(beans_poller.run(), name="beans poller"))
             for task in tasks:
@@ -158,6 +161,7 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
                     await task
             await http.aclose()
             await probe_http.aclose()
+            await webhook_http.aclose()
             engine.dispose()
 
     app = FastAPI(title="h4ks workflows", lifespan=lifespan)

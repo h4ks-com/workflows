@@ -102,6 +102,7 @@ class Job(Base):
     reserved_free: Mapped[int] = mapped_column(default=0)
     reserved_paid: Mapped[int] = mapped_column(default=0)
     identity: Mapped[str | None]
+    webhook: Mapped[JsonObject | None]
     progress_step: Mapped[str | None]
     progress_done: Mapped[int | None]
     progress_total: Mapped[int | None]

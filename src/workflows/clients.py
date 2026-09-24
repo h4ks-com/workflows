@@ -17,6 +17,7 @@ from workflows.jobtypes import JobType
 from workflows.ledger import InsufficientCreditsError, grant_daily
 from workflows.state import AppServices, Db, Services
 from workflows.views import JobView, job_view
+from workflows.webhooks import Webhook
 from workflows.webviews import (
     TOPUP_HINT,
     Page,
@@ -45,6 +46,7 @@ class ClientJobRequest(QuoteRequest):
     identity: IdentityStr | None = Field(
         None, description="Identity acting for this job, or null for an anonymous order."
     )
+    webhook: Webhook | None = Field(None, description="Where to post every status change.")
 
 
 class ClientJobView(BaseModel):
@@ -112,6 +114,7 @@ async def submit_job(body: ClientJobRequest, session: Db, services: AppServices)
     job_type, params, priced = await price_request(services, body)
     job = create_job(session, job_type, params, priced, None)
     job.identity = body.identity
+    job.webhook = body.webhook.model_dump(mode="json") if body.webhook else None
     linked_user = _linked_user(session, body.identity) if body.identity else None
     if linked_user is not None:
         return _submit_for_linked_user(session, services, job, linked_user)
