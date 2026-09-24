@@ -1,10 +1,10 @@
 {% if running %}
 <div class="panel">
   <span class="label">running now</span>
-  <div class="now">
+  <div class="runbox">
     <div class="ring" aria-label="{{ running.eta_label }} left">
       <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="{{ ring_radius }}" fill="none" stroke="#1d2238" stroke-width="8"/><circle cx="50" cy="50" r="{{ ring_radius }}" fill="none" stroke="#5c9eff" stroke-width="8" stroke-dasharray="{{ ring_circumference }}" stroke-dashoffset="{{ running.ring_offset }}"/></svg>
-      <div class="center"><div><b>{{ running.eta_label }}</b><span>left</span></div></div>
+      <div class="center"><div><b data-eta="{{ running.job.eta_seconds or 0 }}" data-eta-plain>{{ running.eta_label }}</b><span>left</span></div></div>
     </div>
     <div class="info">
       <div class="row">
@@ -28,12 +28,12 @@
     <div class="row"><span class="label">waiting · {{ queue.queued|length }}</span></div>
     <div class="queue">
       {% for slot in queue.queued %}
-      <div class="q {{ 'me' if me and slot.owner == me.username else '' }}">
+      <a class="q {{ 'me' if me and slot.owner == me.username else '' }}" href="/jobs/{{ slot.id }}">
         <span class="pos">#{{ slot.position }}</span>
-        <span class="what"><b>{{ slot.owner or 'guest' }}</b> · {{ slot.type }}<small><a href="/jobs/{{ slot.id }}">open</a></small></span>
+        <span class="what"><b>{{ slot.type }} #{{ slot.id }}</b><small>by {{ slot.owner or 'guest' }}</small></span>
         <span class="tag {{ 'wait' if me and slot.owner == me.username else '' }}">{{ 'you' if me and slot.owner == me.username else 'in line' }}</span>
         <span class="num muted eta">~{{ (slot.starts_in_seconds // 60) if slot.starts_in_seconds is not none else '?' }} min</span>
-      </div>
+      </a>
       {% else %}
       <p class="muted">nothing in line. <a href="#create">create something</a>.</p>
       {% endfor %}
@@ -66,7 +66,7 @@
       {% elif file and file.url is playable %}
       <a href="{{ file.url }}" class="muted">download</a>
       {% endif %}
-      <div class="meta"><span class="t"><b>{{ job.result.title if job.result and job.result.title else job.type ~ ' #' ~ job.id }}</b> <span class="muted">· {{ job.type }}{% if job.owner %} · {{ job.owner }}{% endif %}</span></span>{% if not (file and file.mime.startswith('image')) %}<canvas class="wave" data-seed="{{ job.id }}"></canvas>{% endif %}</div>
+      <div class="meta"><span class="t"><a href="/jobs/{{ job.id }}"><b>{{ job.result.title if job.result and job.result.title else job.type ~ ' #' ~ job.id }}</b></a> <span class="muted">· {{ job.type }}{% if job.owner %} · {{ job.owner }}{% endif %}</span></span>{% if not (file and file.mime.startswith('image')) %}<canvas class="wave" data-seed="{{ job.id }}"></canvas>{% endif %}</div>
     </div>
     {% else %}
     <p class="muted">nothing finished yet.</p>

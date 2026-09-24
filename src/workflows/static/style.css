@@ -72,19 +72,22 @@ h2 { font-size: 18px; }
 @keyframes slide { to { background-position: 17px 0; } }
 @media (prefers-reduced-motion: reduce) { .step.now .fill { animation: none; } .eq i { animation: none !important; } }
 
-.now { display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: center; }
+.runbox { display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: center; }
 .ring { width: 112px; height: 112px; position: relative; }
 .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .ring .center { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
 .ring .center b { font: 600 22px var(--mono); display: block; }
 .ring .center span { font: 11px var(--mono); color: var(--dim); }
-.now .info { display: grid; gap: 10px; min-width: 0; }
+.runbox .info { display: grid; gap: 10px; min-width: 0; }
 .eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 14px; }
 .eq i { width: 3px; background: var(--accent); animation: eq 0.9s ease-in-out infinite; }
 .eq i:nth-child(2) { animation-delay: .15s } .eq i:nth-child(3) { animation-delay: .3s } .eq i:nth-child(4) { animation-delay: .45s }
 @keyframes eq { 0%, 100% { height: 3px } 50% { height: 14px } }
 
 .queue { display: grid; }
+a.q { color: inherit; text-decoration: none; }
+a.q:hover { background: var(--panel-2); }
+.res .meta a { color: inherit; text-decoration: none; }
 .q { display: grid; grid-template-columns: 44px 1fr auto auto; gap: 12px; align-items: center; padding: 11px 4px; border-top: 1px solid var(--border); }
 .q:first-child { border-top: 0; }
 .q .pos { font: 600 15px var(--mono); color: var(--accent-2); }
@@ -190,7 +193,7 @@ td.plus { color: var(--ok); } td.minus { color: var(--accent-2); }
   .quote .big { font-size: 28px; }
 }
 @media (max-width: 520px) {
-  .now { grid-template-columns: 1fr; }
+  .runbox { grid-template-columns: 1fr; }
   .ring { justify-self: center; }
   .q { grid-template-columns: 34px 1fr auto; }
   .q .eta { display: none; }

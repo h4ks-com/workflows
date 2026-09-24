@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from workflows.db import Job, JobStatus
-from workflows.jobs import job_type_for, queued_jobs, running_job
+from workflows.db import Job, JobStatus, utcnow
+from workflows.jobs import queued_jobs, running_job
 from workflows.jobtypes import JobType
 
 ROLLING_WINDOW = 20
@@ -56,8 +56,10 @@ class Estimator:
         return job.estimate_seconds * (self._ratios[job.type] or 1.0)
 
     def remaining(self, job: Job) -> float:
-        job_type = job_type_for(self._registry, job.type)
-        return (1.0 - progress_fraction(job, job_type)) * self.duration(job)
+        if job.started_at is None:
+            return self.duration(job)
+        elapsed = (utcnow() - job.started_at).total_seconds()
+        return max(0.0, self.duration(job) - elapsed)
 
     def queue(self) -> tuple[QueueSlot | None, list[QueueSlot]]:
         running = running_job(self._session)
