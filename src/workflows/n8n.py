@@ -42,6 +42,7 @@ class N8nWorkflow(BaseModel):
     id: str
     name: str
     nodes: list[N8nNode]
+    connections: JsonObject = Field(default_factory=dict)
 
 
 class N8nPage(BaseModel):
@@ -101,6 +102,15 @@ def _node(workflow: N8nWorkflow, node_type: str, enabled_only: bool) -> N8nNode:
         if node.type == node_type and not (enabled_only and node.disabled):
             return node
     raise N8nWorkflowError(f"it has no {node_type.rsplit('.', 1)[-1]} node")
+
+
+def _live_form(workflow: N8nWorkflow) -> N8nNode:
+    form_node = _node(workflow, FORM_NODE, enabled_only=True)
+    if form_node.parameters.get("authentication", "none") == "none":
+        raise N8nWorkflowError("its form is public; set it to require an n8n login")
+    if form_node.name not in workflow.connections:
+        raise N8nWorkflowError("its form is not connected to the rest of the workflow")
+    return form_node
 
 
 def _manifest(workflow: N8nWorkflow) -> Manifest:
@@ -274,7 +284,7 @@ class N8nProvider:
         if not isinstance(path, str) or not path:
             raise N8nWorkflowError("its webhook has no path")
         name = manifest.name or _name_from_path(path)
-        form_node = _node(workflow, FORM_NODE, enabled_only=False)
+        form_node = _live_form(workflow)
         title = form_node.parameters.get("formTitle")
         description = form_node.parameters.get("formDescription")
         form = _form(name, form_node, manifest)

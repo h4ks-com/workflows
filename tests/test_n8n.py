@@ -66,6 +66,42 @@ async def test_a_constant_price_reads_as_credits() -> None:
     assert image.pricing == "40 credits"
 
 
+def with_form(change: JsonObject, connected: bool = True) -> JsonObject:
+    workflow = copy.deepcopy(IMAGE_WORKFLOW)
+    form = node(workflow, "n8n-nodes-base.formTrigger")
+    parameters = form["parameters"]
+    assert isinstance(parameters, dict)
+    for key, value in change.items():
+        if key == "disabled":
+            form["disabled"] = value
+        else:
+            parameters[key] = value
+    connections = workflow["connections"]
+    assert isinstance(connections, dict)
+    if not connected:
+        connections.pop("Job Form")
+    return workflow
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("workflow", "error"),
+    [
+        (with_form({"authentication": "none"}), "form is public"),
+        (with_form({}, connected=False), "form is not connected"),
+        (with_form({"disabled": True}), "no formTrigger node"),
+    ],
+)
+async def test_the_form_must_be_a_private_connected_trigger(
+    workflow: JsonObject, error: str
+) -> None:
+    respx.get(LIST_URL).respond(json={"data": [workflow], "nextCursor": None})
+    n8n = provider()
+
+    assert await n8n.discover() == []
+    assert error in n8n.errors[str(IMAGE_WORKFLOW["name"])]
+
+
 @respx.mock
 async def test_skipped_workflows_reach_the_catalog() -> None:
     respx.get(LIST_URL).respond(

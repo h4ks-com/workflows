@@ -6,8 +6,11 @@ Every active n8n workflow tagged `h4ks-workflows` becomes a job type on workflow
 
 1. **The `h4ks-workflows` tag**, and the workflow is published. Remove the tag or unpublish it to take the job off the site.
 2. **An enabled Webhook trigger** with method `POST`, header auth using the `workflows executor (X-API-Key)` credential, and "respond immediately". Its path is where the service sends each job, so keep it unique, for example `workflows-image`.
-3. **A disabled Form Trigger** whose title, description and fields are the form users fill in. We keep it disabled so nobody can submit it on n8n; the service only reads it.
-4. **A sticky note** with a fenced `h4ks-workflows` block holding what a form cannot: at least the price.
+3. **An enabled Form Trigger** whose title, description and fields are the form users fill in on the site, set to require an n8n login, with its own path (for example `workflows-image-form`, since it cannot share the webhook's). It is a real trigger: people signed in to n8n can run the workflow from it, which runs the same flow without touching anyone's credits.
+4. **Both triggers joined into one flow.** The webhook goes straight into `Read Job`. The form goes through `Form Files` (one item per uploaded file), `Has Files?`, `Store Upload` (the shared store sub-workflow, which turns each upload into a `workflows` bucket link) and `From Form`, which builds the same `params` the service sends, with the manual-run sink as `callback_url`. `Read Job` accepts callback URLs on workflows.h4ks.com and the sink, `https://n8n.t3ks.com/webhook/workflows-manual-sink`, which drops the progress and result calls of manual runs. Copy these four nodes from an existing executor.
+5. **A sticky note** with a fenced `h4ks-workflows` block holding what a form cannot: at least the price.
+
+The service skips a workflow whose form is disabled, public or not connected to anything.
 
 ## Form fields
 
