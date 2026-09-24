@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from conftest import BASE_URL, FETCH_HEADERS, SERVICE_TOKEN, make_job, make_user, session_cookie
 from workflows.bus import QUEUE_TOPIC, BusEvent
-from workflows.db import Job, JobStatus, JsonObject, Subscription
+from workflows.db import Job, JobStatus, JsonObject, Subscription, utcnow
 from workflows.jobs import announce
 from workflows.state import Services
 from workflows.webhooks import WebhookNotifier
@@ -45,6 +45,7 @@ def no_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def hooked_job(session: Session, services: Services, status: JobStatus) -> Job:
     job = make_job(session, services, make_user(session, "alice"))
+    job.queued_at = utcnow()
     job.webhook = WEBHOOK
     job.status = status
     job.error = "the executor crashed"
@@ -290,6 +291,7 @@ async def test_notify_posts_every_status_to_every_subscription(
     for url in SUB_URLS:
         subscribe(client, url, "hi: ")
     job = make_job(session, services, make_user(session, "mattf"))
+    job.queued_at = utcnow()
     job.status = status
     job.error = "the executor crashed"
     job.result = {"files": [{"url": url, "name": "a", "mime": "audio/mpeg"} for url in FILE_URLS]}
@@ -319,6 +321,8 @@ async def test_notify_names_someone_for_jobs_without_an_owner(
     route = respx.post(HOOK_URL).respond(204)
     subscribe(client, HOOK_URL)
     job = make_job(session, services, None)
+    job.queued_at = utcnow()
+    session.commit()
 
     await notifier.notify(job.id, JobStatus.CANCELLED)
 
@@ -375,3 +379,18 @@ async def test_web_submission_notifies_subscriptions_that_it_was_queued(
     assert json.loads(route.calls.last.request.content)["message"] == (
         f"mattf submitted a song, #{job_id}: {BASE_URL}/jobs/{job_id}"
     )
+
+
+@respx.mock
+async def test_notify_skips_subscriptions_for_jobs_never_paid(
+    client: TestClient, session: Session, services: Services, notifier: WebhookNotifier
+) -> None:
+    route = respx.post(HOOK_URL).respond(204)
+    subscribe(client, HOOK_URL)
+    job = make_job(session, services, None)
+    job.status = JobStatus.CANCELLED
+    session.commit()
+
+    await notifier.notify(job.id, JobStatus.CANCELLED)
+
+    assert not route.called

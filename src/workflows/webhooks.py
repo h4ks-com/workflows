@@ -156,6 +156,7 @@ class WebhookNotifier:
                     details,
                 )
                 for subscription in session.scalars(select(Subscription))
+                if job.queued_at is not None
             ]
             if job.webhook is not None and status in NOTIFIED_STATUSES:
                 message = f"your {title} #{job.id} {describe(job, status, run_url, urls)}"
