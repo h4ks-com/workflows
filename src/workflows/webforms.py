@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from pydantic import JsonValue
 
 from workflows.db import JsonObject
-from workflows.jobtypes import TEXTAREA, UPLOAD
+from workflows.jobtypes import SHOW_WHEN, TEXTAREA, UPLOAD
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,7 @@ class FieldSpec:
     maximum: float | None = None
     default: JsonValue = None
     accept: str | None = None
+    show_when: JsonObject | None = None
 
 
 def _as_object(value: JsonValue) -> JsonObject:
@@ -89,6 +90,7 @@ def field_specs(schema: JsonObject) -> list[FieldSpec]:
                 maximum=_bound(prop, "maximum"),
                 default=prop.get("default"),
                 accept=str(prop[UPLOAD]) if UPLOAD in prop else None,
+                show_when=_as_object(prop[SHOW_WHEN]) if SHOW_WHEN in prop else None,
             )
         )
     return specs

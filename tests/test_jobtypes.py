@@ -3,6 +3,7 @@ import asyncio
 import httpx
 import pytest
 import respx
+from pydantic import ValidationError
 
 from conftest import SONG_URL, FakeProber
 from workflows.jobtypes import (
@@ -121,3 +122,14 @@ def test_image_reference_is_optional_and_uploadable() -> None:
     schema = ImageParams.model_json_schema()["properties"]["reference_url"]
     assert schema["x-upload"] == "image/*"
     assert ImageParams(prompt="a cat").reference_url is None
+
+
+def test_image_reference_needs_flux_klein() -> None:
+    with pytest.raises(ValidationError, match="flux-klein"):
+        ImageParams(prompt="a cat", reference_url="https://x/cat.png")
+    assert ImageParams(prompt="a cat", model="flux-klein", reference_url="https://x/cat.png")
+
+
+def test_image_reference_shows_only_for_flux_klein() -> None:
+    schema = ImageParams.model_json_schema()["properties"]["reference_url"]
+    assert schema["x-show-when"] == {"model": "flux-klein"}

@@ -137,7 +137,7 @@ async def order_quote(type_name: str, page: PageCtx) -> Response:
     except HTTPException as error:
         if error.status_code != status.HTTP_422_UNPROCESSABLE_CONTENT:
             raise
-        context["error"] = "fill in the required fields to see your price"
+        context["error"] = "fill in the required fields to see the cost"
     return render(page, "_quote_panel.html", context)
 
 

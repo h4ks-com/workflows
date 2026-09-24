@@ -15,7 +15,7 @@
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <div class="panel">
   {% for f in fields %}
-  <div class="field">
+  <div class="field"{% if f.show_when %} data-show-when="{{ f.show_when|tojson|forceescape }}"{% endif %}>
     <label for="f-{{ f.name }}">{{ f.label }}{% if not f.required %} <small>(optional)</small>{% endif %}</label>
     {% if f.kind == "textarea" %}
     <textarea id="f-{{ f.name }}" name="{{ f.name }}">{{ f.default or "" }}</textarea>

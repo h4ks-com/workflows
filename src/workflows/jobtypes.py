@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 from typing import Literal, Protocol
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError, model_validator
 from pydantic.config import JsonDict
 
 PROBE_TIMEOUT_SECONDS = 60.0
@@ -19,6 +19,7 @@ LYRICS_TEXT = 6000
 TEXTAREA = "textarea"
 MULTILINE: JsonDict = {"format": TEXTAREA}
 UPLOAD = "x-upload"
+SHOW_WHEN = "x-show-when"
 MEDIA_UPLOAD: JsonDict = {UPLOAD: "audio/*,video/*"}
 
 
@@ -216,15 +217,26 @@ class ImageParams(JobParams):
         title="Prompt",
         description="What the image should show.",
     )
+    model: Literal["z-image", "flux-klein"] = Field(
+        "z-image",
+        title="Model",
+        description="z-image looks best from a prompt; flux-klein is faster and takes a reference.",
+    )
     reference_url: HttpUrl | None = Field(
         None,
         title="Reference image",
-        json_schema_extra={UPLOAD: "image/*"},
+        json_schema_extra={UPLOAD: "image/*", SHOW_WHEN: {"model": "flux-klein"}},
         description="An image to edit or take the look from. Link, upload or drop one.",
     )
     shape: Literal["square", "portrait", "landscape"] = Field(
         "square", title="Shape", description="Shape of the image."
     )
+
+    @model_validator(mode="after")
+    def reference_needs_flux_klein(self) -> ImageParams:
+        if self.reference_url is not None and self.model != "flux-klein":
+            raise ValueError("a reference image needs the flux-klein model")
+        return self
 
     def quote(self, probe: Probe | None) -> int:
         return 40

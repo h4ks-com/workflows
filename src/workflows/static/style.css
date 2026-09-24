@@ -15,6 +15,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; border-radius: 0; }
+[hidden] { display: none !important; }
 html, body { background: var(--bg); color: var(--text); }
 body { margin: 0; font: 15px/1.55 var(--sans); padding-inline: 16px; border-top: 2px solid var(--accent); min-height: 100svh; display: flex; flex-direction: column; }
 a { color: var(--accent); }

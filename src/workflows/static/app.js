@@ -107,7 +107,20 @@
 
   document.addEventListener("change", (event) => {
     if (event.target.matches("input[data-upload-for]")) uploadFile(event.target, event.target.files[0]);
+    applyShowWhen();
   });
+
+  // A field that only makes sense for some choices declares them; we hide it and clear it otherwise.
+  function applyShowWhen() {
+    document.querySelectorAll("[data-show-when]").forEach((field) => {
+      const form = field.closest("form");
+      const rules = JSON.parse(field.dataset.showWhen);
+      const visible = Object.entries(rules).every(([name, value]) => form.elements[name]?.value === value);
+      field.hidden = !visible;
+      if (!visible) field.querySelectorAll("input, textarea").forEach((input) => { if (input.type !== "file") input.value = ""; });
+    });
+  }
+  document.addEventListener("DOMContentLoaded", applyShowWhen);
 
   document.addEventListener("dragover", (event) => {
     const zone = event.target.closest(".upload");
