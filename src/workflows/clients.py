@@ -4,14 +4,22 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, HttpUrl
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.responses import Response
 
 from workflows.api import QuoteRequest, price_request
 from workflows.auth import csrf_token, require_service
-from workflows.db import ExternalIdentity, Job, JobStatus, LinkRequest, User, utcnow
+from workflows.db import (
+    ExternalIdentity,
+    Job,
+    JobStatus,
+    LinkRequest,
+    Subscription,
+    User,
+    utcnow,
+)
 from workflows.jobs import announce, create_job, enqueue, hash_token, job_type_for
 from workflows.jobtypes import JobType
 from workflows.ledger import InsufficientCreditsError, grant_daily
@@ -60,6 +68,12 @@ class ClientLinkRequest(BaseModel):
 
 class ClientLinkView(BaseModel):
     link_url: str = Field(description="One-time page to confirm the link by logging in.")
+
+
+class SubscriptionView(BaseModel):
+    url: str = Field(description="URL that receives a POST on every job status change.")
+    extra_params: dict[str, str] = Field(description="Fields merged into every payload as-is.")
+    message_prefix: str = Field(description="Prepended to `message`.")
 
 
 class IdentityView(BaseModel):
@@ -147,6 +161,31 @@ async def get_identity(identity: str, session: Db) -> IdentityView:
     return IdentityView(
         username=user.username, free_credits=user.free_credits, paid_credits=user.paid_credits
     )
+
+
+@router.put("/subscription")
+async def put_subscription(body: Webhook, session: Db) -> SubscriptionView:
+    url = str(body.url)
+    subscription = session.scalar(select(Subscription).where(Subscription.url == url))
+    if subscription is None:
+        subscription = Subscription(url=url)
+        session.add(subscription)
+    subscription.token = body.token
+    subscription.extra_params = dict(body.extra_params)
+    subscription.message_prefix = body.message_prefix
+    session.commit()
+    return SubscriptionView(
+        url=url, extra_params=body.extra_params, message_prefix=body.message_prefix
+    )
+
+
+@router.delete("/subscription", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_subscription(url: HttpUrl, session: Db) -> None:
+    subscription = session.scalar(select(Subscription).where(Subscription.url == str(url)))
+    if subscription is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no subscription for this url")
+    session.delete(subscription)
+    session.commit()
 
 
 def _job_by_confirm_token(session: Session, token: str) -> Job:

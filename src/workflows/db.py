@@ -130,6 +130,17 @@ class JobEvent(Base):
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    url: Mapped[str] = mapped_column(unique=True)
+    token: Mapped[str]
+    extra_params: Mapped[JsonObject]
+    message_prefix: Mapped[str]
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
 class LedgerEntry(Base):
     __tablename__ = "ledger_entries"
 
