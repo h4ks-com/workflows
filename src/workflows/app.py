@@ -24,6 +24,7 @@ from workflows.ledger import InsufficientCreditsError
 from workflows.login import build_oauth
 from workflows.login import router as login_router
 from workflows.mcp import build_mcp
+from workflows.n8n import N8nProvider
 from workflows.probe import PROBE_LIMITS, ProbeError, Prober, YtdlProber
 from workflows.settings import Settings, load_settings
 from workflows.state import AppServices, Services
@@ -125,6 +126,12 @@ def _register_routers(app: FastAPI) -> None:
     app.include_router(web.router)
 
 
+def default_providers(settings: Settings, http: httpx.AsyncClient) -> list[Provider]:
+    if settings.n8n_url and settings.n8n_api_key:
+        return [N8nProvider(http, settings.n8n_url, settings.n8n_api_key, settings.executor_token)]
+    return [builtin_provider(http, settings.n8n_url, settings.executor_token)]
+
+
 def _install_middleware(app: FastAPI, settings: Settings) -> None:
     app.add_middleware(BodyLimit)
     app.middleware("http")(_security_headers)
@@ -155,9 +162,7 @@ def create_app(
     probe_http = httpx.AsyncClient(limits=PROBE_LIMITS)
     engine = connect(settings.database_url)
     sessions = session_factory(engine)
-    if providers is None:
-        providers = [builtin_provider(http, settings.n8n_url, settings.executor_token)]
-    catalog = Catalog(providers)
+    catalog = Catalog(providers if providers is not None else default_providers(settings, http))
     bus = EventBus()
     worker = QueueWorker(sessions, catalog, bus, settings)
     beans_poller = BeansPoller(sessions, http, settings) if settings.beans_token else None

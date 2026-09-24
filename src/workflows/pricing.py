@@ -89,6 +89,12 @@ class PriceRule:
         if len(media) > 1:
             raise PriceError("a price can read the duration of one field only")
         self.media_field = next(iter(media), None)
+        callees = {id(call.func) for call in calls}
+        self.fields = {
+            node.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Name) and id(node) not in callees
+        }
 
     def evaluate(self, params: JsonObject, probe: Probe | None) -> int:
         return round(_number(self._value(self._body, params, probe)))

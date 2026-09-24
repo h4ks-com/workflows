@@ -20,6 +20,7 @@ class Settings:
     service_token: str = ""
     admin_users: frozenset[str] = frozenset()
     n8n_url: str = ""
+    n8n_api_key: str = ""
     executor_token: str = ""
     executor_timeout_factor: float = DEFAULT_EXECUTOR_TIMEOUT_FACTOR
     first_event_timeout_seconds: int = DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS
@@ -55,6 +56,7 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
         service_token=environ.get("SERVICE_TOKEN", ""),
         admin_users=_username_list(environ.get("WORKFLOWS_ADMIN_USERS", "")),
         n8n_url=environ.get("N8N_URL", "").rstrip("/"),
+        n8n_api_key=environ.get("N8N_API_KEY", ""),
         executor_token=environ.get("WORKFLOWS_EXECUTOR_TOKEN", ""),
         executor_timeout_factor=float(
             environ.get("EXECUTOR_TIMEOUT_FACTOR", DEFAULT_EXECUTOR_TIMEOUT_FACTOR)
