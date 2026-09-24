@@ -83,10 +83,9 @@
   // We upload straight to the public temp file host, which keeps files for 24 hours.
   const UPLOAD_URL = "https://s.t3ks.com/api/";
 
-  async function uploadFile(picker) {
+  async function uploadFile(picker, file) {
     const target = document.getElementById(picker.dataset.uploadFor);
     const button = picker.closest("label");
-    const file = picker.files[0];
     if (!target || !file) return;
     const label = button.firstChild;
     label.textContent = "uploading…";
@@ -106,7 +105,25 @@
   }
 
   document.addEventListener("change", (event) => {
-    if (event.target.matches("input[data-upload-for]")) uploadFile(event.target);
+    if (event.target.matches("input[data-upload-for]")) uploadFile(event.target, event.target.files[0]);
+  });
+
+  document.addEventListener("dragover", (event) => {
+    const zone = event.target.closest(".upload");
+    if (!zone) return;
+    event.preventDefault();
+    zone.classList.add("drop");
+  });
+  document.addEventListener("dragleave", (event) => {
+    event.target.closest(".upload")?.classList.remove("drop");
+  });
+  document.addEventListener("drop", (event) => {
+    const zone = event.target.closest(".upload");
+    if (!zone) return;
+    event.preventDefault();
+    zone.classList.remove("drop");
+    const file = event.dataTransfer.files[0];
+    if (file) uploadFile(zone.querySelector("input[data-upload-for]"), file);
   });
 
   function connectQueueStream() {
