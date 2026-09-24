@@ -5,7 +5,7 @@
 .rev-ok
 
 # local database
-data/
+/data/
 *.db
 *.sqlite
 *.sqlite3

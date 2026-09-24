@@ -1,0 +1,115 @@
+{
+ "id": "wfImageExec0001",
+ "name": "Workflows Executor: Image",
+ "active": true,
+ "tags": [
+  {
+   "name": "h4ks-workflows"
+  }
+ ],
+ "nodes": [
+  {
+   "name": "Job In",
+   "type": "n8n-nodes-base.webhook",
+   "typeVersion": 2.1,
+   "parameters": {
+    "path": "workflows-image",
+    "httpMethod": "POST"
+   }
+  },
+  {
+   "name": "Job Form",
+   "type": "n8n-nodes-base.formTrigger",
+   "typeVersion": 2.6,
+   "parameters": {
+    "formTitle": "Image",
+    "formDescription": "Create an image from a description.",
+    "formFields": {
+     "values": [
+      {
+       "fieldName": "prompt",
+       "fieldLabel": "Prompt",
+       "requiredField": true,
+       "fieldType": "textarea"
+      },
+      {
+       "fieldName": "model",
+       "fieldLabel": "Model",
+       "requiredField": false,
+       "fieldType": "dropdown",
+       "fieldOptions": {
+        "values": [
+         {
+          "option": "z-image"
+         },
+         {
+          "option": "flux-klein"
+         }
+        ]
+       },
+       "defaultValue": "z-image"
+      },
+      {
+       "fieldName": "reference_url",
+       "fieldLabel": "Reference image",
+       "requiredField": false,
+       "fieldType": "file",
+       "acceptFileTypes": "image/*",
+       "multipleFiles": false
+      },
+      {
+       "fieldName": "shape",
+       "fieldLabel": "Shape",
+       "requiredField": false,
+       "fieldType": "dropdown",
+       "fieldOptions": {
+        "values": [
+         {
+          "option": "square"
+         },
+         {
+          "option": "portrait"
+         },
+         {
+          "option": "landscape"
+         }
+        ]
+       },
+       "defaultValue": "square"
+      },
+      {
+       "fieldName": "size",
+       "fieldLabel": "Size",
+       "requiredField": false,
+       "fieldType": "dropdown",
+       "fieldOptions": {
+        "values": [
+         {
+          "option": "normal"
+         },
+         {
+          "option": "large"
+         }
+        ]
+       },
+       "defaultValue": "normal"
+      }
+     ]
+    },
+    "options": {}
+   },
+   "disabled": true
+  },
+  {
+   "name": "h4ks workflows manifest",
+   "type": "n8n-nodes-base.stickyNote",
+   "typeVersion": 1,
+   "parameters": {
+    "width": 520,
+    "height": 560,
+    "color": 4,
+    "content": "## h4ks workflows\nThe form above (disabled) and this block define the job on workflows.h4ks.com.\n```h4ks-workflows\n{\n  \"name\": \"image\",\n  \"pricing\": \"40 credits per image, 80 for large\",\n  \"price\": \"80 if size == 'large' else 40\",\n  \"steps\": [\n    [\n      \"generate\",\n      85\n    ],\n    [\n      \"store\",\n      15\n    ]\n  ],\n  \"position\": 4,\n  \"fields\": {\n    \"prompt\": {\n      \"description\": \"What the image should show.\"\n    },\n    \"model\": {\n      \"description\": \"z-image looks best from a prompt; flux-klein is faster and takes a reference.\"\n    },\n    \"reference_url\": {\n      \"description\": \"An image to edit or take the look from. Link, upload or drop one.\",\n      \"show_when\": {\n        \"model\": \"flux-klein\"\n      }\n    },\n    \"shape\": {\n      \"description\": \"Shape of the image.\"\n    },\n    \"size\": {\n      \"description\": \"normal is about 1 megapixel; large is about 2.3 and costs double.\"\n    }\n  }\n}\n```"
+   }
+  }
+ ]
+}
