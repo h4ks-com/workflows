@@ -1,99 +1,27 @@
-import asyncio
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, replace
-from typing import Literal, Protocol
+from dataclasses import dataclass
+from typing import Literal
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, ValidationError, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 from pydantic.config import JsonDict
 
-PROBE_TIMEOUT_SECONDS = 60.0
-PROBE_CONCURRENCY = 4
-PROBE_LIMITS = httpx.Limits(max_connections=PROBE_CONCURRENCY, max_keepalive_connections=2)
-MAX_MEDIA_SECONDS = 3600
-YTDL_API_KEY_HEADER = "x-api-key"
+from workflows.catalog import HttpExecutor, JobType, StaticProvider, Step
+from workflows.forms import SHOW_WHEN, TEXTAREA, UPLOAD, form_from_schema
+from workflows.pricing import PriceRule
+
 SHORT_TEXT = 200
 MEDIUM_TEXT = 500
 LONG_TEXT = 2000
 LYRICS_TEXT = 6000
-TEXTAREA = "textarea"
 MULTILINE: JsonDict = {"format": TEXTAREA}
-UPLOAD = "x-upload"
-SHOW_WHEN = "x-show-when"
 MEDIA_UPLOAD: JsonDict = {UPLOAD: "audio/*,video/*"}
 
 
-class ProbeError(Exception):
-    pass
-
-
-@dataclass(frozen=True)
-class Probe:
-    duration_seconds: float
-    title: str
-
-    def __post_init__(self) -> None:
-        if not 0 < self.duration_seconds <= MAX_MEDIA_SECONDS:
-            raise ProbeError(
-                f"the media must be between 0 and {MAX_MEDIA_SECONDS // 60} minutes long"
-            )
-
-
-class ProbeInfo(BaseModel):
-    duration: float
-    title: str | None = None
-
-
-class Prober(Protocol):
-    async def info(self, url: str) -> Probe: ...
-
-
-class YtdlProber:
-    def __init__(self, http: httpx.AsyncClient, base_url: str, api_key: str) -> None:
-        self._http = http
-        self._base_url = base_url
-        self._api_key = api_key
-        self._slots = asyncio.Semaphore(PROBE_CONCURRENCY)
-
-    async def info(self, url: str) -> Probe:
-        async with self._slots:
-            info = await self._fetch(url)
-        return Probe(info.duration, info.title or "")
-
-    async def _fetch(self, url: str) -> ProbeInfo:
-        try:
-            response = await self._http.post(
-                f"{self._base_url}/v1/info",
-                json={"url": url},
-                headers={YTDL_API_KEY_HEADER: self._api_key},
-                timeout=PROBE_TIMEOUT_SECONDS,
-            )
-            response.raise_for_status()
-            return ProbeInfo.model_validate_json(response.content)
-        except (httpx.HTTPError, ValidationError) as error:
-            raise ProbeError(f"could not read {url}") from error
-
-
-def media_seconds(probe: Probe | None) -> float:
-    if probe is None:
-        raise ProbeError("this job type needs a probed input")
-    return probe.duration_seconds
-
-
-class JobParams(BaseModel, ABC):
+class BuiltinParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    def media_url(self) -> str | None:
-        return None
 
-    @abstractmethod
-    def quote(self, probe: Probe | None) -> int: ...
-
-    def estimate_seconds(self, probe: Probe | None) -> int:
-        return self.quote(probe)
-
-
-class ParodyParams(JobParams):
+class ParodyParams(BuiltinParams):
     prompt: str | None = Field(
         None,
         max_length=LONG_TEXT,
@@ -128,14 +56,8 @@ class ParodyParams(JobParams):
     )
     radio: bool = Field(False, title="Play on radio", description="Also play it on h4ks radio.")
 
-    def media_url(self) -> str:
-        return str(self.url)
 
-    def quote(self, probe: Probe | None) -> int:
-        return round(1.2 * media_seconds(probe) + 120)
-
-
-class SongParams(JobParams):
+class SongParams(BuiltinParams):
     prompt: str = Field(
         min_length=1,
         max_length=LONG_TEXT,
@@ -165,12 +87,8 @@ class SongParams(JobParams):
         description="Music model: ace-step is fast, minimax sounds better but costs more.",
     )
 
-    def quote(self, probe: Probe | None) -> int:
-        per_second = 0.3 if self.model == "ace-step" else 1.8
-        return round(per_second * self.seconds + 60)
 
-
-class VoiceParams(JobParams):
+class VoiceParams(BuiltinParams):
     url: HttpUrl = Field(
         title="Song",
         json_schema_extra=MEDIA_UPLOAD,
@@ -182,14 +100,8 @@ class VoiceParams(JobParams):
         description="Link to a recording of the new voice, or upload one. A song works too.",
     )
 
-    def media_url(self) -> str:
-        return str(self.url)
 
-    def quote(self, probe: Probe | None) -> int:
-        return round(2 * media_seconds(probe) + 90)
-
-
-class PodcastParams(JobParams):
+class PodcastParams(BuiltinParams):
     prompt: str = Field(
         min_length=1,
         max_length=LONG_TEXT,
@@ -205,11 +117,8 @@ class PodcastParams(JobParams):
         description="Style of the background music, for example soft jazz.",
     )
 
-    def quote(self, probe: Probe | None) -> int:
-        return round(90 * self.minutes + 120)
 
-
-class ImageParams(JobParams):
+class ImageParams(BuiltinParams):
     prompt: str = Field(
         min_length=1,
         max_length=LONG_TEXT,
@@ -237,66 +146,28 @@ class ImageParams(JobParams):
         description="normal is about 1 megapixel; large is about 2.3 and costs double.",
     )
 
-    @model_validator(mode="after")
-    def reference_needs_flux_klein(self) -> ImageParams:
-        if self.reference_url is not None and self.model != "flux-klein":
-            raise ValueError("a reference image needs the flux-klein model")
-        return self
-
-    def quote(self, probe: Probe | None) -> int:
-        return 80 if self.size == "large" else 40
-
 
 @dataclass(frozen=True)
-class Step:
-    name: str
-    weight: int
-
-
-@dataclass(frozen=True)
-class JobType:
+class Builtin:
     name: str
     title: str
     description: str
     pricing: str
-    params_model: type[JobParams]
-    steps: tuple[Step, ...]
-    webhook: str | None = None
-    executor_url: str = ""
-
-    @property
-    def available(self) -> bool:
-        return bool(self.executor_url)
-
-    def step_names(self) -> list[str]:
-        return [step.name for step in self.steps]
+    price: str
+    params: type[BuiltinParams]
+    steps: tuple[tuple[str, int], ...]
+    webhook: str
 
 
-@dataclass(frozen=True)
-class Quote:
-    credits: int
-    estimate_seconds: int
-    probe: Probe | None
-
-
-async def quote(params: JobParams, prober: Prober) -> Quote:
-    url = params.media_url()
-    probe = await prober.info(url) if url else None
-    return Quote(params.quote(probe), params.estimate_seconds(probe), probe)
-
-
-def _steps(*pairs: tuple[str, int]) -> tuple[Step, ...]:
-    return tuple(Step(name, weight) for name, weight in pairs)
-
-
-JOB_TYPES = (
-    JobType(
+BUILTINS = (
+    Builtin(
         name="parody",
         title="Parody",
         description="Replace the lyrics of a song, sung in the original voice.",
         pricing="1.2 credits per second of song + 120",
-        params_model=ParodyParams,
-        steps=_steps(
+        price="1.2 * duration(url) + 120",
+        params=ParodyParams,
+        steps=(
             ("fetch", 5),
             ("separate", 20),
             ("align", 5),
@@ -306,70 +177,73 @@ JOB_TYPES = (
         ),
         webhook="workflows-parody",
     ),
-    JobType(
+    Builtin(
         name="song",
         title="Song",
         description="Create a new song from a description.",
         pricing="0.3 credits per second (1.8 with minimax) + 60",
-        params_model=SongParams,
-        steps=_steps(("write", 20), ("generate", 70), ("store", 10)),
+        price="(0.3 if model == 'ace-step' else 1.8) * seconds + 60",
+        params=SongParams,
+        steps=(("write", 20), ("generate", 70), ("store", 10)),
         webhook="workflows-song",
     ),
-    JobType(
+    Builtin(
         name="voice",
         title="Voice swap",
         description="Replace the voice in a song with another voice.",
         pricing="2 credits per second of song + 90",
-        params_model=VoiceParams,
-        steps=_steps(("fetch", 10), ("separate", 30), ("convert", 45), ("mix", 15)),
+        price="2 * duration(url) + 90",
+        params=VoiceParams,
+        steps=(("fetch", 10), ("separate", 30), ("convert", 45), ("mix", 15)),
         webhook="workflows-voice",
     ),
-    JobType(
+    Builtin(
         name="podcast",
         title="Podcast episode",
         description="Create a two-host podcast episode about any topic.",
         pricing="90 credits per minute + 120",
-        params_model=PodcastParams,
-        steps=_steps(
-            ("research", 10), ("cast", 5), ("bed", 15), ("write", 20), ("speak", 40), ("mix", 10)
+        price="90 * minutes + 120",
+        params=PodcastParams,
+        steps=(
+            ("research", 10),
+            ("cast", 5),
+            ("bed", 15),
+            ("write", 20),
+            ("speak", 40),
+            ("mix", 10),
         ),
         webhook="workflows-podcast",
     ),
-    JobType(
+    Builtin(
         name="image",
         title="Image",
         description="Create an image from a description.",
         pricing="40 credits per image, 80 for large",
-        params_model=ImageParams,
-        steps=_steps(("generate", 85), ("store", 15)),
+        price="80 if size == 'large' else 40",
+        params=ImageParams,
+        steps=(("generate", 85), ("store", 15)),
         webhook="workflows-image",
     ),
 )
 
 
-class RetiredParams(JobParams):
-    def quote(self, probe: Probe | None) -> int:
-        return 0
-
-
-def retired_type(name: str) -> JobType:
-    return JobType(
-        name=name,
-        title=name,
-        description="This job type is no longer offered.",
-        pricing="not for sale",
-        params_model=RetiredParams,
-        steps=(),
-    )
-
-
-def build_registry(n8n_url: str) -> dict[str, JobType]:
-    return {
-        job_type.name: replace(
-            job_type,
-            executor_url=f"{n8n_url.rstrip('/')}/webhook/{job_type.webhook}"
-            if n8n_url and job_type.webhook
-            else "",
+def builtin_job_types(http: httpx.AsyncClient, n8n_url: str, token: str) -> list[JobType]:
+    return [
+        JobType(
+            name=builtin.name,
+            title=builtin.title,
+            description=builtin.description,
+            pricing=builtin.pricing,
+            form=form_from_schema(builtin.params.model_json_schema()),
+            price=PriceRule(builtin.price),
+            steps=tuple(Step(name, weight) for name, weight in builtin.steps),
+            executor=HttpExecutor(http, f"{n8n_url.rstrip('/')}/webhook/{builtin.webhook}", token)
+            if n8n_url
+            else None,
         )
-        for job_type in JOB_TYPES
-    }
+        for builtin in BUILTINS
+    ]
+
+
+def builtin_provider(http: httpx.AsyncClient, n8n_url: str, token: str) -> StaticProvider:
+    return StaticProvider(builtin_job_types(http, n8n_url, token))

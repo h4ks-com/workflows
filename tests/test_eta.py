@@ -10,7 +10,7 @@ from workflows.state import Services
 
 def test_remaining_counts_down_from_the_start_time(session: Session, services: Services) -> None:
     job = make_job(session, services, None)
-    estimator = Estimator(session, services.registry)
+    estimator = Estimator(session)
     assert estimator.remaining(job) == 60
 
     job.started_at = utcnow() - timedelta(seconds=20)

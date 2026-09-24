@@ -11,6 +11,7 @@ from starlette.responses import Response
 
 from workflows.api import QuoteRequest, price_request
 from workflows.auth import csrf_token, require_service
+from workflows.catalog import JobType
 from workflows.db import (
     ExternalIdentity,
     Job,
@@ -20,8 +21,7 @@ from workflows.db import (
     User,
     utcnow,
 )
-from workflows.jobs import announce, create_job, enqueue, hash_token, job_type_for
-from workflows.jobtypes import JobType
+from workflows.jobs import announce, create_job, enqueue, hash_token
 from workflows.ledger import InsufficientCreditsError, grant_daily
 from workflows.state import AppServices, Db, Services
 from workflows.views import JobView, job_view
@@ -106,9 +106,7 @@ def _submit_for_linked_user(
         ) from error
     session.commit()
     announce(services.bus, job)
-    return ClientJobView(
-        job=job_view(job, job_type_for(services.registry, job.type)), confirm_url=None
-    )
+    return ClientJobView(job=job_view(job, services.catalog.find(job.type)), confirm_url=None)
 
 
 def _submit_awaiting_confirmation(
@@ -210,7 +208,7 @@ def _render_confirm(
 ) -> Response:
     context: dict[str, TemplateValue] = {
         "job": job,
-        "job_type": job_type_for(page.services.registry, job.type),
+        "job_type": page.services.catalog.find(job.type),
         "csrf_token": csrf_token(page.request),
         "error": error,
     }

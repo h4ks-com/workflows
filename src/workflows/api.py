@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from workflows.auth import LoggedInUser, bearer_token, is_admin, require_fetch_header
 from workflows.bus import BusEvent, job_topic
+from workflows.catalog import JobType, Quote
 from workflows.db import Job, JobStatus, JsonObject, User
 from workflows.eta import Estimator
 from workflows.jobs import (
@@ -16,10 +17,8 @@ from workflows.jobs import (
     enqueue,
     ensure_available,
     is_terminal_repeat,
-    job_type_for,
     token_matches,
 )
-from workflows.jobtypes import JobParams, JobType, Quote, quote
 from workflows.state import AppServices, Db, Services
 from workflows.views import (
     JobDetailView,
@@ -48,7 +47,7 @@ class QuoteRequest(BaseModel):
 
 
 def get_job_type(services: Services, name: str) -> JobType:
-    job_type = services.registry.get(name)
+    job_type = services.catalog.get(name)
     if job_type is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"no job type named {name}")
     return job_type
@@ -56,15 +55,15 @@ def get_job_type(services: Services, name: str) -> JobType:
 
 async def price_request(
     services: Services, request: QuoteRequest
-) -> tuple[JobType, JobParams, Quote]:
+) -> tuple[JobType, JsonObject, Quote]:
     job_type = get_job_type(services, request.type)
     ensure_available(job_type)
     try:
-        params = job_type.params_model.model_validate(request.params)
+        params = job_type.validate(request.params)
     except ValidationError as error:
         detail = error.errors(include_url=False, include_context=False)
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, detail) from error
-    return job_type, params, await quote(params, services.prober)
+    return job_type, params, await job_type.quote(params, services.prober)
 
 
 def _ensure_can_cancel(job: Job, user: User, services: Services) -> None:
@@ -84,7 +83,7 @@ def _ensure_callback_token(request: Request, job: Job) -> None:
 
 @router.get("/types")
 async def list_types(services: AppServices) -> list[JobTypeView]:
-    return [type_view(job_type) for job_type in services.registry.values()]
+    return [type_view(job_type) for job_type in services.catalog.all()]
 
 
 @router.post("/quote")
@@ -122,7 +121,7 @@ async def submit_job(
     enqueue(session, job, user)
     session.commit()
     announce(services.bus, job)
-    return job_view(job, job_type, Estimator(session, services.registry).slot(job))
+    return job_view(job, job_type, Estimator(session).slot(job))
 
 
 @router.post("/jobs/{job_id}/cancel")
@@ -134,7 +133,7 @@ async def cancel_job(
     cancel(session, job)
     session.commit()
     announce(services.bus, job)
-    return job_view(job, job_type_for(services.registry, job.type))
+    return job_view(job, services.catalog.find(job.type))
 
 
 @router.post("/jobs/{job_id}/events", status_code=status.HTTP_204_NO_CONTENT)
@@ -149,7 +148,7 @@ async def executor_event(
     _ensure_callback_token(request, job)
     if is_terminal_repeat(job, event):
         return
-    data = apply_event(session, job, job_type_for(services.registry, job.type), event)
+    data = apply_event(session, job, services.catalog.find(job.type), event)
     session.commit()
     services.bus.publish(job_topic(job.id), BusEvent(event.kind, data))
     if job.status != JobStatus.RUNNING:

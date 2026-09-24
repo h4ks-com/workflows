@@ -13,9 +13,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from workflows.bus import QUEUE_TOPIC, EventBus
+from workflows.catalog import Catalog, JobType
 from workflows.db import Job, JobStatus, JsonObject, Subscription
-from workflows.jobs import STATUS_EVENT, StoredResult, job_type_for, one_line
-from workflows.jobtypes import JobType
+from workflows.jobs import STATUS_EVENT, StoredResult, one_line
 
 logger = logging.getLogger(__name__)
 
@@ -137,13 +137,13 @@ class WebhookNotifier:
     def __init__(
         self,
         sessions: sessionmaker[Session],
-        registry: dict[str, JobType],
+        catalog: Catalog,
         bus: EventBus,
         http: httpx.AsyncClient,
         base_url: str,
     ) -> None:
         self._sessions = sessions
-        self._registry = registry
+        self._catalog = catalog
         self._bus = bus
         self._http = http
         self._base_url = base_url
@@ -172,7 +172,7 @@ class WebhookNotifier:
     def _deliveries(self, job_id: int, status: JobStatus) -> list[Delivery]:
         with self._sessions() as session:
             job = session.get_one(Job, job_id)
-            job_type = job_type_for(self._registry, job.type)
+            job_type = self._catalog.find(job.type)
             title = job_type.title.lower()
             run_url = f"{self._base_url}/jobs/{job.id}"
             urls = result_urls(job, status)

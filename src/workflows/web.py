@@ -28,14 +28,14 @@ from workflows.admin import (
 )
 from workflows.api import QuoteRequest, get_job_type, price_request
 from workflows.auth import csrf_token, require_admin
+from workflows.catalog import JobType
 from workflows.db import Job, JobStatus, JsonObject, User
-from workflows.jobs import JobError, announce, create_job, enqueue, job_type_for
-from workflows.jobtypes import JobType, ProbeError
+from workflows.jobs import JobError, announce, create_job, enqueue
 from workflows.ledger import InsufficientCreditsError
+from workflows.probe import ProbeError
 from workflows.settings import CREDITS_PER_BEAN, FREE_DAILY_CREDITS
 from workflows.state import Services
 from workflows.views import job_detail_view, job_views, queue_view, quote_view, type_view
-from workflows.webforms import field_specs
 from workflows.webviews import (
     TOPUP_HINT,
     Page,
@@ -64,7 +64,7 @@ router = APIRouter()
 
 def params_from_form(form: FormData, job_type: JobType) -> JsonObject:
     params: JsonObject = {}
-    for spec in field_specs(job_type.params_model.model_json_schema()):
+    for spec in job_type.form.fields:
         raw = form.get(spec.name)
         if spec.kind == "checkbox":
             params[spec.name] = spec.name in form
@@ -76,11 +76,11 @@ def params_from_form(form: FormData, job_type: JobType) -> JsonObject:
 def _queue_context(session: Session, services: Services) -> Context:
     queue = queue_view(session, services)
     running = (
-        running_panel(queue.running, job_type_for(services.registry, queue.running.type), [])
+        running_panel(queue.running, services.catalog.find(queue.running.type), [])
         if queue.running
         else None
     )
-    types = [type_view(job_type) for job_type in services.registry.values()]
+    types = [type_view(job_type) for job_type in services.catalog.all()]
     recent = [
         job
         for job in job_views(session, services, None, 20)
@@ -103,7 +103,7 @@ async def partial_queue(page: PageCtx) -> Response:
 def _submit_context(
     page: Page, job_type: JobType, error: str | None = None, prefill: JsonObject | None = None
 ) -> Context:
-    fields = field_specs(job_type.params_model.model_json_schema())
+    fields = list(job_type.form.fields)
     if prefill:
         fields = [
             replace(spec, default=prefill[spec.name]) if spec.name in prefill else spec
@@ -187,7 +187,7 @@ async def _create_and_redirect(
 
 def _job_context(page: Page, job_id: int) -> Context:
     detail = job_detail_view(page.session, page.services, job_id)
-    job_type = job_type_for(page.services.registry, detail.type)
+    job_type = page.services.catalog.find(detail.type)
     return {
         "detail": detail,
         "job_type": type_view(job_type),

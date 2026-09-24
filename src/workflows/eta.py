@@ -3,9 +3,9 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from workflows.catalog import JobType
 from workflows.db import Job, JobStatus, utcnow
 from workflows.jobs import queued_jobs, running_job
-from workflows.jobtypes import JobType
 
 ROLLING_WINDOW = 20
 
@@ -45,9 +45,8 @@ class QueueSlot:
 
 
 class Estimator:
-    def __init__(self, session: Session, registry: dict[str, JobType]) -> None:
+    def __init__(self, session: Session) -> None:
         self._session = session
-        self._registry = registry
         self._ratios: dict[str, float | None] = {}
 
     def duration(self, job: Job) -> float:

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from workflows.auth import require_admin, require_fetch_header
 from workflows.db import Job, JobEvent, User, utcnow
-from workflows.jobs import StoredResult, announce, cancel, job_type_for
+from workflows.jobs import StoredResult, announce, cancel
 from workflows.ledger import adjust
 from workflows.state import AppServices, Db, Services
 from workflows.storage import object_location
@@ -94,7 +94,7 @@ async def remove_job_files(session: Session, services: Services, job_id: int) ->
 
 def health(services: Services) -> HealthView:
     return HealthView(
-        executors={name: job_type.available for name, job_type in services.registry.items()},
+        executors={job_type.name: job_type.available for job_type in services.catalog.all()},
         worker_paused=services.worker.paused,
         worker_alive=services.worker.alive,
         beans_poller_last_success=services.beans_poller.last_success
@@ -106,13 +106,13 @@ def health(services: Services) -> HealthView:
 @router.post("/jobs/{job_id}/cancel")
 async def admin_cancel_job(job_id: int, session: Db, services: AppServices) -> JobView:
     job = cancel_job(session, services, job_id)
-    return job_view(job, job_type_for(services.registry, job.type))
+    return job_view(job, services.catalog.find(job.type))
 
 
 @router.post("/jobs/{job_id}/remove")
 async def admin_remove_job(job_id: int, session: Db, services: AppServices) -> JobView:
     job = await remove_job_files(session, services, job_id)
-    return job_view(job, job_type_for(services.registry, job.type))
+    return job_view(job, services.catalog.find(job.type))
 
 
 @router.post("/users/{username}/credits")

@@ -3,14 +3,17 @@
 Instructions for AI agents working in this repo. Read before editing.
 
 ## What this is
-h4ks workflows is a storefront and queue for workflows that run elsewhere. It sells job types for credits (bought with beans, plus a daily free allowance), keeps one global queue where exactly one job runs at a time, dispatches each job to its executor, and shows progress from the executor's callbacks. It knows nothing about how a job is done: an executor is any HTTP endpoint that accepts the dispatch and reports `step`, `log`, `result` or `error` events back. Job types (their params, price formula and steps) are declared in the registry.
+h4ks workflows is a storefront and queue for workflows that run elsewhere. It sells job types for credits (bought with beans, plus a daily free allowance), keeps one global queue where exactly one job runs at a time, dispatches each job to its executor, and shows progress from the executor's callbacks. It knows nothing about how a job is done: an executor is any HTTP endpoint that accepts the dispatch and reports `step`, `log`, `result` or `error` events back. Job types (their form, price expression, steps and executor) come from providers, which the catalog merges.
 
 ## Where things live
 - App factory (routers, middleware, error handlers, lifespan tasks): `src/workflows/app.py`
 - Settings, one module that reads every environment variable: `src/workflows/settings.py` (all listed in `.env.example`)
 - Database models and engine (SQLAlchemy, `create_all` plus additive column migrations on startup): `src/workflows/db.py`
 - Credits ledger (daily free grant, reserve, capture, refund, top-up, admin adjust): `src/workflows/ledger.py`
-- Job type registry, params models, quotes, probing: `src/workflows/jobtypes.py`
+- Job type catalog, the `Provider` and `Executor` interfaces, the HTTP executor and the in-memory provider: `src/workflows/catalog.py`
+- Generic forms (field specs, strict validation, JSON schema) and the JSON Schema form driver: `src/workflows/forms.py`
+- Price expressions: `src/workflows/pricing.py`; media probing: `src/workflows/probe.py`
+- Built-in job types served by the in-memory provider: `src/workflows/builtin.py`
 - Job lifecycle and the executor callback contract: `src/workflows/jobs.py`
 - Queue worker (dispatch, timeout watchdog, pause): `src/workflows/worker.py`
 - Job status webhooks: `src/workflows/webhooks.py`
@@ -22,7 +25,7 @@ h4ks workflows is a storefront and queue for workflows that run elsewhere. It se
 - Login (Logto OIDC, dev login): `src/workflows/login.py`; account, wallet and top-ups: `src/workflows/account.py`; Beans top-up poller: `src/workflows/beans.py`
 - Client-facing job submission and identity linking, confirm and link pages: `src/workflows/clients.py`; admin API: `src/workflows/admin.py`
 - Object storage for admin removal of generated files (MinIO): `src/workflows/storage.py`
-- Web pages: `src/workflows/web.py` with `webforms.py`, `webviews.py` (templates, page context, rendering, CSRF form helper), `templates/` and `static/`
+- Web pages: `src/workflows/web.py` with `webviews.py` (templates, page context, rendering, CSRF form helper), `templates/` and `static/`
 - The `Makefile` is the single canonical interface for all checks; CI and pre-commit both call it.
 
 ## Stack
@@ -57,7 +60,10 @@ h4ks workflows is a storefront and queue for workflows that run elsewhere. It se
 - Never `await` between reading a balance and committing. The app shares one event loop, so another request can change the balance at any `await`.
 - The daily free allowance sets the free balance to 500 on the first action of a UTC day and is spent before paid credits.
 - A job pays a fixed quote from its type's formula. Credits are reserved when the job is queued, captured on success, and refunded on failure or cancellation.
-- Job types live in code in `jobtypes.py`. Each type declares its n8n webhook path; `N8N_URL` points at the n8n instance, and its executor URL is `N8N_URL/webhook/<webhook path>`. A type with `webhook=None` has no executor yet, is listed as unavailable and refuses quotes and submissions. Adding a workflow means adding a params model and a `JobType` entry with its webhook path, nothing else.
+- The rest of the app reads job types only through `Catalog` (`get`, `find`, `all`). The catalog asks every `Provider` to `discover()` its job types on startup and every 60 seconds, keeps the first type of each name, and keeps a provider's last good list when it raises `ProviderError`. An unknown name resolves to a retired type.
+- A `JobType` carries its `Form`, a `PriceRule`, its steps and an optional `Executor`. A type without an executor is listed as unavailable and refuses quotes and submissions. The form is the single source for the web form, the JSON schema in the API and MCP, and strict validation; a field's `show_when` also means it is only accepted when that condition holds.
+- Prices are expressions over the validated params: numbers, field names, `+ - * /`, comparisons, `a if cond else b` and `duration(field)`, which probes that field's media. The estimate in seconds equals the price.
+- The built-in provider serves today's types with an `HttpExecutor` that posts to `N8N_URL/webhook/<webhook path>`.
 - Executor dispatch carries the `X-API-Key` header and a JSON body with `job_id`, `type`, `params`, `steps` (step names in order), `callback_url` and `callback_token`. Executors call back with the per-job bearer token; we store only its hash.
 - Executor contract: accept the dispatch with a 2xx and send the first `step` event right away. A 4xx/5xx answer or a refused connection fails the job and refunds it. A dispatch timeout leaves the job running, and a job with no event within `FIRST_EVENT_TIMEOUT` seconds fails and is refunded. Executors retry callbacks: a repeated `result` after success or `error` after failure gets 204, any other event after the job ended gets 409, which includes every callback for a cancelled job.
 - Lifecycle changes publish on the event bus after the commit, for live views.

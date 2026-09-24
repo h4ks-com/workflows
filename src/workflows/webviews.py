@@ -14,13 +14,13 @@ from starlette.datastructures import FormData
 from starlette.responses import Response
 
 from workflows.auth import CurrentUser, is_admin, verify_csrf
+from workflows.catalog import JobType, Step
 from workflows.db import Job, JobStatus, LedgerEntry, LedgerKind, LinkRequest, User, utcnow
-from workflows.jobtypes import JobType, Step
+from workflows.forms import FieldSpec
 from workflows.ledger import grant_daily
 from workflows.settings import Settings
 from workflows.state import AppServices, Db, Services
 from workflows.views import JobEventView, JobView
-from workflows.webforms import FieldSpec
 
 RING_RADIUS = 44
 RING_CIRCUMFERENCE = round(2 * math.pi * RING_RADIUS, 1)

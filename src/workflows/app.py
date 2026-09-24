@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import signal
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pathlib import Path
 
@@ -15,14 +15,16 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from workflows import account, admin, api, clients, stream, web
 from workflows.beans import BeansPoller
+from workflows.builtin import builtin_provider
 from workflows.bus import EventBus
+from workflows.catalog import Catalog, Provider
 from workflows.db import connect, session_factory
 from workflows.jobs import InvalidEventError, JobError
-from workflows.jobtypes import PROBE_LIMITS, ProbeError, Prober, YtdlProber, build_registry
 from workflows.ledger import InsufficientCreditsError
 from workflows.login import build_oauth
 from workflows.login import router as login_router
 from workflows.mcp import build_mcp
+from workflows.probe import PROBE_LIMITS, ProbeError, Prober, YtdlProber
 from workflows.settings import Settings, load_settings
 from workflows.state import AppServices, Services
 from workflows.storage import build_storage
@@ -123,22 +125,48 @@ def _register_routers(app: FastAPI) -> None:
     app.include_router(web.router)
 
 
-def create_app(settings: Settings | None = None, prober: Prober | None = None) -> FastAPI:
+def _install_middleware(app: FastAPI, settings: Settings) -> None:
+    app.add_middleware(BodyLimit)
+    app.middleware("http")(_security_headers)
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=settings.session_secret,
+        https_only=settings.base_url.startswith("https://"),
+    )
+    for error_type in ERROR_STATUS:
+        app.add_exception_handler(error_type, _domain_error)
+
+
+async def _cancel_all(tasks: list[asyncio.Task[None]]) -> None:
+    for task in tasks:
+        task.cancel()
+    for task in tasks:
+        with suppress(asyncio.CancelledError):
+            await task
+
+
+def create_app(
+    settings: Settings | None = None,
+    prober: Prober | None = None,
+    providers: Sequence[Provider] | None = None,
+) -> FastAPI:
     settings = settings or load_settings()
     http = httpx.AsyncClient()
     probe_http = httpx.AsyncClient(limits=PROBE_LIMITS)
     engine = connect(settings.database_url)
     sessions = session_factory(engine)
-    registry = build_registry(settings.n8n_url)
+    if providers is None:
+        providers = [builtin_provider(http, settings.n8n_url, settings.executor_token)]
+    catalog = Catalog(providers)
     bus = EventBus()
-    worker = QueueWorker(sessions, registry, bus, http, settings)
+    worker = QueueWorker(sessions, catalog, bus, settings)
     beans_poller = BeansPoller(sessions, http, settings) if settings.beans_token else None
     webhook_http = httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT_SECONDS)
-    notifier = WebhookNotifier(sessions, registry, bus, webhook_http, settings.base_url)
+    notifier = WebhookNotifier(sessions, catalog, bus, webhook_http, settings.base_url)
     services = Services(
         settings=settings,
         sessions=sessions,
-        registry=registry,
+        catalog=catalog,
         bus=bus,
         prober=prober or YtdlProber(probe_http, settings.ytdl_url, settings.ytdl_api_key),
         worker=worker,
@@ -154,17 +182,18 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         async with AsyncExitStack() as stack:
             await stack.enter_async_context(mcp_app.lifespan(app))
-            tasks = [worker.start(), asyncio.create_task(notifier.run(), name="webhook notifier")]
+            await catalog.refresh()
+            tasks = [
+                worker.start(),
+                asyncio.create_task(notifier.run(), name="webhook notifier"),
+                asyncio.create_task(catalog.run(), name="job type catalog"),
+            ]
             if beans_poller is not None:
                 tasks.append(asyncio.create_task(beans_poller.run(), name="beans poller"))
             for task in tasks:
                 task.add_done_callback(exit_when_dead)
             yield
-            for task in tasks:
-                task.cancel()
-            for task in tasks:
-                with suppress(asyncio.CancelledError):
-                    await task
+            await _cancel_all(tasks)
             await http.aclose()
             await probe_http.aclose()
             await webhook_http.aclose()
@@ -173,15 +202,7 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
     app = FastAPI(title="h4ks workflows", lifespan=lifespan)
     app.state.services = services
     app.state.mcp = mcp
-    app.add_middleware(BodyLimit)
-    app.middleware("http")(_security_headers)
-    app.add_middleware(
-        SessionMiddleware,
-        secret_key=settings.session_secret,
-        https_only=settings.base_url.startswith("https://"),
-    )
-    for error_type in ERROR_STATUS:
-        app.add_exception_handler(error_type, _domain_error)
+    _install_middleware(app, settings)
     _register_routers(app)
     app.mount("/mcp", mcp_app)
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

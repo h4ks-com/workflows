@@ -30,7 +30,7 @@ def build_mcp(services: Services) -> FastMCP:
     @mcp.tool
     def list_job_types() -> list[JobTypeView]:
         """List every job type: pricing, steps and parameter schema."""
-        return [type_view(job_type) for job_type in services.registry.values()]
+        return [type_view(job_type) for job_type in services.catalog.all()]
 
     @mcp.tool
     async def quote(type: str, params: JsonObject) -> QuoteView:
@@ -67,7 +67,7 @@ def build_mcp(services: Services) -> FastMCP:
                 available=job_type.available,
                 web_url=f"{base_url}/submit/{job_type.name}",
             )
-            for job_type in services.registry.values()
+            for job_type in services.catalog.all()
         ]
 
     return mcp

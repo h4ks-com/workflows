@@ -203,11 +203,13 @@ def test_job_page_shows_step_progress_and_log(
     job = queue_job(session, services, make_user(session, "alice"))
     start(job)
     session.commit()
-    apply_event(session, job, services.registry["song"], LogEvent(kind="log", message="warming up"))
+    apply_event(
+        session, job, services.catalog.find("song"), LogEvent(kind="log", message="warming up")
+    )
     apply_event(
         session,
         job,
-        services.registry["song"],
+        services.catalog.find("song"),
         StepEvent(kind="step", step="write", done=1, total=2),
     )
     session.commit()

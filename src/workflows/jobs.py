@@ -2,7 +2,6 @@ import hashlib
 import hmac
 import re
 import secrets
-from collections.abc import Mapping
 from datetime import timedelta
 from typing import Annotated, Literal
 
@@ -11,8 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from workflows.bus import QUEUE_TOPIC, BusEvent, EventBus, job_topic
+from workflows.catalog import JobType, Quote
 from workflows.db import Job, JobEvent, JobStatus, JsonObject, User, utcnow
-from workflows.jobtypes import JobParams, JobType, Quote, retired_type
 from workflows.ledger import capture, refund, reserve
 
 STATUS_EVENT = "status"
@@ -102,21 +101,17 @@ def token_matches(token: str, digest: str) -> bool:
     return hmac.compare_digest(hash_token(token).encode(), digest.encode())
 
 
-def job_type_for(registry: Mapping[str, JobType], type_name: str) -> JobType:
-    return registry.get(type_name) or retired_type(type_name)
-
-
 def ensure_available(job_type: JobType) -> None:
     if not job_type.available:
         raise JobError(f"{job_type.name} is not available yet")
 
 
 def create_job(
-    session: Session, job_type: JobType, params: JobParams, quote: Quote, owner: User | None
+    session: Session, job_type: JobType, params: JsonObject, quote: Quote, owner: User | None
 ) -> Job:
     job = Job(
         type=job_type.name,
-        params=params.model_dump(mode="json"),
+        params=params,
         status=JobStatus.AWAITING_CONFIRMATION,
         owner=owner,
         quote=quote.credits,

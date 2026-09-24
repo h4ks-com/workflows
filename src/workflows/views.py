@@ -5,10 +5,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from workflows.catalog import JobType, Quote
 from workflows.db import Job, JobStatus, JsonObject, User
 from workflows.eta import Estimator, QueueSlot, progress_fraction
-from workflows.jobs import EventKind, job_type_for
-from workflows.jobtypes import JobType, Quote
+from workflows.jobs import EventKind
 from workflows.settings import CREDITS_PER_BEAN
 from workflows.state import Services
 
@@ -97,7 +97,7 @@ def type_view(job_type: JobType) -> JobTypeView:
         description=job_type.description,
         pricing=job_type.pricing,
         available=job_type.available,
-        params_schema=job_type.params_model.model_json_schema(),
+        params_schema=job_type.form.json_schema(),
         steps=[StepView(name=step.name, weight=step.weight) for step in job_type.steps],
     )
 
@@ -143,14 +143,12 @@ def quote_view(priced: Quote) -> QuoteView:
 
 
 def queue_view(session: Session, services: Services) -> QueueView:
-    running, queued = Estimator(session, services.registry).queue()
-    registry = services.registry
+    running, queued = Estimator(session).queue()
+    catalog = services.catalog
     return QueueView(
         paused=services.worker.paused,
-        running=job_view(running.job, job_type_for(registry, running.job.type), running)
-        if running
-        else None,
-        queued=[job_view(slot.job, job_type_for(registry, slot.job.type), slot) for slot in queued],
+        running=job_view(running.job, catalog.find(running.job.type), running) if running else None,
+        queued=[job_view(slot.job, catalog.find(slot.job.type), slot) for slot in queued],
     )
 
 
@@ -158,15 +156,13 @@ def job_views(session: Session, services: Services, user: str | None, limit: int
     query = select(Job).order_by(Job.id.desc()).limit(limit)
     if user is not None:
         query = query.join(Job.owner).where(User.username == user)
-    return [
-        job_view(job, job_type_for(services.registry, job.type)) for job in session.scalars(query)
-    ]
+    return [job_view(job, services.catalog.find(job.type)) for job in session.scalars(query)]
 
 
 def job_detail_view(session: Session, services: Services, job_id: int) -> JobDetailView:
     job = get_job_or_404(session, job_id)
-    slot = Estimator(session, services.registry).slot(job)
-    view = job_view(job, job_type_for(services.registry, job.type), slot)
+    slot = Estimator(session).slot(job)
+    view = job_view(job, services.catalog.find(job.type), slot)
     events = [
         JobEventView(kind=event.kind, data=event.data, created_at=event.created_at)
         for event in job.events

@@ -48,7 +48,7 @@ FILE_URLS = ["https://bucket.example/a.mp3", "https://bucket.example/a.json"]
 @pytest.fixture
 async def notifier(services: Services) -> AsyncIterator[WebhookNotifier]:
     async with httpx.AsyncClient() as http:
-        yield WebhookNotifier(services.sessions, services.registry, services.bus, http, BASE_URL)
+        yield WebhookNotifier(services.sessions, services.catalog, services.bus, http, BASE_URL)
 
 
 @pytest.fixture(autouse=True)

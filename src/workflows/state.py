@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from workflows.beans import BeansPoller
 from workflows.bus import EventBus
-from workflows.jobtypes import JobType, Prober
+from workflows.catalog import Catalog
+from workflows.probe import Prober
 from workflows.settings import Settings
 from workflows.storage import Storage
 from workflows.worker import QueueWorker
@@ -19,7 +20,7 @@ from workflows.worker import QueueWorker
 class Services:
     settings: Settings
     sessions: sessionmaker[Session]
-    registry: dict[str, JobType]
+    catalog: Catalog
     bus: EventBus
     prober: Prober
     worker: QueueWorker

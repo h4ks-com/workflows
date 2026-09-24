@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from dataclasses import replace
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -12,13 +13,14 @@ from itsdangerous import TimestampSigner
 from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session
 
-from workflows import jobtypes
 from workflows.app import create_app
 from workflows.auth import SESSION_USER_KEY
+from workflows.builtin import builtin_job_types
+from workflows.catalog import Quote, StaticProvider
 from workflows.db import Job, LedgerEntry, User
 from workflows.jobs import create_job, enqueue
-from workflows.jobtypes import Probe, ProbeError, Quote, SongParams
 from workflows.ledger import adjust
+from workflows.probe import Probe, ProbeError
 from workflows.settings import Settings
 from workflows.state import Services
 
@@ -34,13 +36,14 @@ FETCH_HEADERS = {"X-Requested-With": "fetch"}
 NO_EXECUTOR_YET = {"voice", "podcast", "image"}
 
 
-@pytest.fixture(autouse=True)
-def _limit_available_job_types(monkeypatch: pytest.MonkeyPatch) -> None:
-    patched = tuple(
-        replace(job_type, webhook=None) if job_type.name in NO_EXECUTOR_YET else job_type
-        for job_type in jobtypes.JOB_TYPES
+def limited_provider(http: httpx.AsyncClient) -> StaticProvider:
+    job_types = builtin_job_types(http, N8N_URL, EXECUTOR_TOKEN)
+    return StaticProvider(
+        [
+            replace(job_type, executor=None) if job_type.name in NO_EXECUTOR_YET else job_type
+            for job_type in job_types
+        ]
     )
-    monkeypatch.setattr(jobtypes, "JOB_TYPES", patched)
 
 
 class FakeProber:
@@ -75,9 +78,11 @@ def prober() -> FakeProber:
 
 @pytest.fixture
 def app(settings: Settings, prober: FakeProber) -> Iterator[FastAPI]:
-    app = create_app(settings, prober)
+    app = create_app(settings, prober, [limited_provider(httpx.AsyncClient())])
+    services: Services = app.state.services
+    asyncio.run(services.catalog.refresh())
     yield app
-    engine: Engine = app.state.services.sessions.kw["bind"]
+    engine: Engine = services.sessions.kw["bind"]
     engine.dispose()
 
 
@@ -123,8 +128,9 @@ def assert_ledger_matches(session: Session, user: User) -> None:
 
 
 def make_job(session: Session, services: Services, owner: User | None, credits: int = 100) -> Job:
-    params = SongParams(prompt="a song about cats")
-    job = create_job(session, services.registry["song"], params, Quote(credits, 60, None), owner)
+    song = services.catalog.find("song")
+    params = song.validate({"prompt": "a song about cats"})
+    job = create_job(session, song, params, Quote(credits, 60, None), owner)
     session.commit()
     return job
 
