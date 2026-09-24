@@ -7,7 +7,7 @@ import pytest
 import respx
 
 from workflows.builtin import builtin_job_types
-from workflows.catalog import HttpExecutor, ProviderError
+from workflows.catalog import Catalog, HttpExecutor, ProviderError
 from workflows.db import JsonObject
 from workflows.n8n import N8nProvider
 
@@ -30,7 +30,7 @@ def node(workflow: JsonObject, node_type: str) -> JsonObject:
     return found
 
 
-def with_manifest(change: dict[str, object]) -> JsonObject:
+def with_manifest(change: dict[str, object], replace: bool = False) -> JsonObject:
     workflow = copy.deepcopy(IMAGE_WORKFLOW)
     sticky = node(workflow, "n8n-nodes-base.stickyNote")
     parameters = sticky["parameters"]
@@ -38,9 +38,44 @@ def with_manifest(change: dict[str, object]) -> JsonObject:
     content = str(parameters["content"])
     start = content.index("{")
     end = content.rindex("}") + 1
-    manifest = json.loads(content[start:end]) | change
+    manifest = change if replace else json.loads(content[start:end]) | change
     parameters["content"] = content[:start] + json.dumps(manifest) + content[end:]
     return workflow
+
+
+@respx.mock
+async def test_a_note_with_only_a_price_uses_defaults() -> None:
+    minimal = with_manifest({"price": "80 if size == 'large' else 40"}, replace=True)
+    respx.get(LIST_URL).respond(json={"data": [minimal], "nextCursor": None})
+
+    [image] = await provider().discover()
+
+    assert image.name == "image"
+    assert image.pricing == "80 if size == 'large' else 40"
+    assert image.step_names() == ["run"]
+    assert image.form.fields[0].name == "prompt"
+
+
+@respx.mock
+async def test_a_constant_price_reads_as_credits() -> None:
+    minimal = with_manifest({"price": "40"}, replace=True)
+    respx.get(LIST_URL).respond(json={"data": [minimal], "nextCursor": None})
+
+    [image] = await provider().discover()
+
+    assert image.pricing == "40 credits"
+
+
+@respx.mock
+async def test_skipped_workflows_reach_the_catalog() -> None:
+    respx.get(LIST_URL).respond(
+        json={"data": [with_manifest({}, replace=True)], "nextCursor": None}
+    )
+    catalog = Catalog([provider()])
+
+    await catalog.refresh()
+
+    assert "price" in catalog.skipped()[str(IMAGE_WORKFLOW["name"])]
 
 
 @respx.mock

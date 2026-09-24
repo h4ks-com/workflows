@@ -127,12 +127,15 @@ def retired_type(name: str) -> JobType:
 
 
 class Provider(Protocol):
+    errors: dict[str, str]
+
     async def discover(self) -> list[JobType]: ...
 
 
 class StaticProvider:
     def __init__(self, job_types: Sequence[JobType]) -> None:
         self._job_types = list(job_types)
+        self.errors: dict[str, str] = {}
 
     async def discover(self) -> list[JobType]:
         return list(self._job_types)
@@ -180,3 +183,8 @@ class Catalog:
 
     def all(self) -> list[JobType]:
         return list(self._types.values())
+
+    def skipped(self) -> dict[str, str]:
+        return {
+            name: error for provider in self._providers for name, error in provider.errors.items()
+        }

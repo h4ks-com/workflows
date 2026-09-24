@@ -20,6 +20,9 @@ WEBHOOK_NODE = "n8n-nodes-base.webhook"
 FORM_NODE = "n8n-nodes-base.formTrigger"
 STICKY_NODE = "n8n-nodes-base.stickyNote"
 MANIFEST_BLOCK = re.compile(r"```" + TAG + r"\s*\n(.*?)```", re.DOTALL)
+NAME_PATTERN = r"^[a-z][a-z0-9-]*$"
+WEBHOOK_PREFIX = "workflows-"
+DEFAULT_STEP = ("run", 1)
 TEXT_LIMIT = 200
 TEXTAREA_LIMIT = 2000
 
@@ -85,10 +88,10 @@ class FieldOverride(BaseModel):
 class Manifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    name: str = Field(pattern=r"^[a-z][a-z0-9-]*$")
-    pricing: str
     price: str
-    steps: list[tuple[str, int]] = Field(min_length=1)
+    name: str | None = Field(None, pattern=NAME_PATTERN)
+    pricing: str | None = None
+    steps: list[tuple[str, int]] = Field(default_factory=lambda: [DEFAULT_STEP], min_length=1)
     position: int = 0
     fields: dict[str, FieldOverride] = Field(default_factory=dict)
 
@@ -198,6 +201,21 @@ def _form(name: str, form_node: N8nNode, manifest: Manifest) -> Form:
     return Form(f"{name.replace('-', ' ').title().replace(' ', '')}Params", fields)
 
 
+def _name_from_path(path: str) -> str:
+    name = path.removeprefix(WEBHOOK_PREFIX)
+    if not re.fullmatch(NAME_PATTERN, name):
+        raise N8nWorkflowError(f"its webhook path {path} makes no valid name; set one in the note")
+    return name
+
+
+def _pricing_text(price: PriceRule) -> str:
+    return (
+        f"{price.expression} credits"
+        if not price.fields and not price.media_field
+        else price.expression
+    )
+
+
 class N8nProvider:
     def __init__(
         self, http: httpx.AsyncClient, base_url: str, api_key: str, executor_token: str
@@ -255,19 +273,20 @@ class N8nProvider:
         path = webhook.parameters.get("path")
         if not isinstance(path, str) or not path:
             raise N8nWorkflowError("its webhook has no path")
+        name = manifest.name or _name_from_path(path)
         form_node = _node(workflow, FORM_NODE, enabled_only=False)
         title = form_node.parameters.get("formTitle")
         description = form_node.parameters.get("formDescription")
-        form = _form(manifest.name, form_node, manifest)
+        form = _form(name, form_node, manifest)
         price = PriceRule(manifest.price)
         missing = price.fields - {spec.name for spec in form.fields}
         if missing:
             raise N8nWorkflowError(f"its price reads fields the form lacks: {sorted(missing)}")
         job_type = JobType(
-            name=manifest.name,
-            title=title if isinstance(title, str) and title else manifest.name,
+            name=name,
+            title=title if isinstance(title, str) and title else name,
             description=description if isinstance(description, str) else "",
-            pricing=manifest.pricing,
+            pricing=manifest.pricing or _pricing_text(price),
             form=form,
             price=price,
             steps=tuple(Step(name, weight) for name, weight in manifest.steps),

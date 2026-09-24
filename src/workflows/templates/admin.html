@@ -50,6 +50,12 @@
       <span>worker</span><span class="{{ 'ok' if health.worker_alive else 'muted' }}">{{ 'running' if health.worker_alive else 'stopped' }}</span>
       <span>beans poller</span><span class="muted num">{{ health.beans_poller_last_success|relative_time }}</span>
     </div>
+    {% if health.skipped_workflows %}
+    <span class="label">fix these workflows in n8n</span>
+    <div class="kv">
+      {% for name, reason in health.skipped_workflows.items() %}<span>{{ name }}</span><span class="bad">{{ reason }}</span>{% endfor %}
+    </div>
+    {% endif %}
   </div>
 </div>
 

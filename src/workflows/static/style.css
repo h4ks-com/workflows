@@ -57,6 +57,7 @@ h2 { font-size: 18px; }
 .tag.ok { color: var(--ok); border-color: var(--ok); }
 .tag.wait { color: var(--accent-2); border-color: var(--accent-2); }
 .tag.bad { color: var(--bad); border-color: var(--bad); }
+.kv .bad { color: var(--bad); }
 .page { display: grid; gap: 22px; }
 .notice { border: 1px solid var(--border); padding: 12px 16px; background: var(--panel); }
 .notice.warn { border-color: var(--accent-2); color: var(--accent-2); }

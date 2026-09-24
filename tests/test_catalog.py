@@ -25,6 +25,7 @@ class FailingProvider:
     def __init__(self) -> None:
         self.failing = False
         self.job_types = [job_type("echo")]
+        self.errors: dict[str, str] = {}
 
     async def discover(self) -> list[JobType]:
         if self.failing:

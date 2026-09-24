@@ -43,6 +43,9 @@ class HealthView(BaseModel):
     beans_poller_last_success: datetime | None = Field(
         description="When the beans poller last read transactions successfully."
     )
+    skipped_workflows: dict[str, str] = Field(
+        description="Workflows a provider could not turn into a job type, with the reason."
+    )
 
 
 def user_or_404(session: Session, username: str) -> User:
@@ -100,6 +103,7 @@ def health(services: Services) -> HealthView:
         beans_poller_last_success=services.beans_poller.last_success
         if services.beans_poller
         else None,
+        skipped_workflows=services.catalog.skipped(),
     )
 
 

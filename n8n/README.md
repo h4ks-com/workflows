@@ -1,17 +1,17 @@
 # n8n workflows
 
-Every active n8n workflow tagged `h4ks-workflows` becomes a job type on workflows.h4ks.com, in the API and in the MCP. The service lists them with a read-only n8n API key every 60 seconds. A workflow that breaks the rules below is skipped and the service logs why.
+Every active n8n workflow tagged `h4ks-workflows` becomes a job type on workflows.h4ks.com, in the API and in the MCP. The service lists them with a read-only n8n API key every 60 seconds. A workflow that breaks the rules below is skipped, and the admin page lists it with the reason.
 
 ## What the workflow needs
 
 1. **The `h4ks-workflows` tag**, and the workflow is published. Remove the tag or unpublish it to take the job off the site.
 2. **An enabled Webhook trigger** with method `POST`, header auth using the `workflows executor (X-API-Key)` credential, and "respond immediately". Its path is where the service sends each job, so keep it unique, for example `workflows-image`.
 3. **A disabled Form Trigger** whose title, description and fields are the form users fill in. We keep it disabled so nobody can submit it on n8n; the service only reads it.
-4. **A sticky note** with a fenced `h4ks-workflows` block holding the job's JSON settings.
+4. **A sticky note** with a fenced `h4ks-workflows` block holding what a form cannot: at least the price.
 
 ## Form fields
 
-Every field needs a Field Name, which becomes the param name the executor receives.
+Every field needs a Field Name, which becomes the param name the executor receives. A field's placeholder is the help text under it on the site.
 
 | n8n field | On the site | The executor receives |
 | --- | --- | --- |
@@ -27,26 +27,33 @@ Required fields are required on the site. A default value pre-fills the field; f
 
 ## The settings note
 
+The smallest note is just the price:
+
+```h4ks-workflows
+{"price": "40"}
+```
+
+A fuller one, from the image job:
+
 ```h4ks-workflows
 {
-  "name": "image",
   "pricing": "40 credits per image, 80 for large",
   "price": "80 if size == 'large' else 40",
   "steps": [["generate", 85], ["store", 15]],
   "position": 4,
   "fields": {
-    "prompt": {"description": "What the image should show.", "max_length": 2000},
+    "size": {"description": "normal is about 1 megapixel; large is about 2.3 and costs double."},
     "reference_url": {"show_when": {"model": "flux-klein"}}
   }
 }
 ```
 
-- `name`: the job type id in URLs and the API, lowercase letters, digits and dashes.
-- `pricing`: the price explained in words, shown to users.
-- `price`: the credits a job costs, as an expression over the field names. It allows numbers, `+ - * /`, comparisons, `a if condition else b` and `duration(field)`, which reads the length in seconds of the media behind a link field. For example `1.2 * duration(url) + 120`. The estimated run time in seconds equals the price.
-- `steps`: the step names the executor reports, in order, each with a weight for the progress bar.
-- `position`: the order on the site, lowest first.
-- `fields`: per-field settings the n8n form cannot express: `description`, `type`, `minimum`, `maximum`, `min_length`, `max_length` and `show_when`. A field with `show_when` shows only when the other fields hold those values, and the service rejects it otherwise.
+- `price` (required): the credits a job costs, as an expression over the field names. It allows numbers, `+ - * /`, comparisons, `a if condition else b` and `duration(field)`, which reads the length in seconds of the media behind a link field. For example `1.2 * duration(url) + 120`. The estimated run time in seconds equals the price.
+- `pricing`: the price explained in words, shown to users. Defaults to the price expression.
+- `steps`: the step names the executor reports, in order, each with a weight for the progress bar. Defaults to one step called `run`.
+- `position`: the order on the site, lowest first. Defaults to 0.
+- `name`: the job type id in URLs and the API, lowercase letters, digits and dashes. Defaults to the webhook path without its `workflows-` prefix.
+- `fields`: per-field settings the n8n form cannot hold: `description` (help text for dropdowns, files and checkboxes, which have no placeholder), `type`, `minimum`, `maximum`, `min_length`, `max_length` and `show_when`. A field with `show_when` shows only when the other fields hold those values, and the service rejects it otherwise.
 
 ## What the executor does
 
