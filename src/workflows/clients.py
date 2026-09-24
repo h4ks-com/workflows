@@ -25,7 +25,7 @@ from workflows.jobtypes import JobType
 from workflows.ledger import InsufficientCreditsError, grant_daily
 from workflows.state import AppServices, Db, Services
 from workflows.views import JobView, job_view
-from workflows.webhooks import Webhook
+from workflows.webhooks import Subscribe, Webhook
 from workflows.webviews import (
     TOPUP_HINT,
     Page,
@@ -71,9 +71,7 @@ class ClientLinkView(BaseModel):
 
 
 class SubscriptionView(BaseModel):
-    url: str = Field(description="URL that receives a POST on every job status change.")
-    extra_params: dict[str, str] = Field(description="Fields merged into every payload as-is.")
-    message_prefix: str = Field(description="Prepended to `message`.")
+    url: str = Field(description="URL that receives a signed POST on every job event.")
 
 
 class IdentityView(BaseModel):
@@ -164,19 +162,15 @@ async def get_identity(identity: str, session: Db) -> IdentityView:
 
 
 @router.put("/subscription")
-async def put_subscription(body: Webhook, session: Db) -> SubscriptionView:
+async def put_subscription(body: Subscribe, session: Db) -> SubscriptionView:
     url = str(body.url)
     subscription = session.scalar(select(Subscription).where(Subscription.url == url))
     if subscription is None:
         subscription = Subscription(url=url)
         session.add(subscription)
-    subscription.token = body.token
-    subscription.extra_params = dict(body.extra_params)
-    subscription.message_prefix = body.message_prefix
+    subscription.signing_key = body.signing_key
     session.commit()
-    return SubscriptionView(
-        url=url, extra_params=body.extra_params, message_prefix=body.message_prefix
-    )
+    return SubscriptionView(url=url)
 
 
 @router.delete("/subscription", status_code=status.HTTP_204_NO_CONTENT)

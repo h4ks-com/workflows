@@ -1,4 +1,7 @@
 import asyncio
+import hashlib
+import hmac
+import json
 import logging
 from dataclasses import dataclass
 from typing import Annotated
@@ -42,6 +45,15 @@ class Webhook(BaseModel):
     message_prefix: str = Field("", max_length=100, description="Prepended to `message`.")
 
 
+class Subscribe(BaseModel):
+    url: HttpUrl = Field(description="URL that receives a signed POST on every job event.")
+    signing_key: str = Field(
+        min_length=16,
+        max_length=200,
+        description="HMAC-SHA256 key used to sign the payload, sent as `X-Webhook-Signature`.",
+    )
+
+
 class StatusChange(BaseModel):
     job_id: int
     status: JobStatus
@@ -55,30 +67,53 @@ class ResultFiles(BaseModel):
 class Delivery:
     label: str
     url: str
-    token: str
     payload: JsonObject
+    headers: dict[str, str]
 
 
 def build_delivery(label: str, hook: Webhook, message: str, details: JsonObject) -> Delivery:
     text = one_line(hook.message_prefix + message)
     payload: JsonObject = {**hook.extra_params, "message": text, **details}
-    return Delivery(label, str(hook.url), hook.token, payload)
+    headers = {"Authorization": f"Bearer {hook.token}"}
+    return Delivery(label, str(hook.url), payload, headers)
 
 
-def announcement(job: Job, status: JobStatus, title: str, run_url: str, urls: list[str]) -> str:
-    owner = job.owner.username if job.owner else "someone"
-    if status == JobStatus.QUEUED:
-        return f"{owner} submitted a {title}, #{job.id}: {run_url}"
-    subject = f"{owner}'s {title} #{job.id}"
-    match status:
-        case JobStatus.RUNNING:
-            return f"{subject} started"
-        case JobStatus.SUCCEEDED:
-            return f"{subject} is done: {' '.join(urls) or run_url}"
-        case JobStatus.FAILED:
-            return f"{subject} failed: {job.error}"
-        case _:
-            return f"{subject} was cancelled"
+def sign(signing_key: str, payload: JsonObject) -> str:
+    digest = hmac.new(
+        signing_key.encode(), json.dumps(payload, sort_keys=True).encode(), hashlib.sha256
+    ).hexdigest()
+    return f"sha256={digest}"
+
+
+def job_event_payload(
+    job: Job, job_type: JobType, status: JobStatus, run_url: str, urls: list[str]
+) -> JsonObject:
+    return {
+        "event": "job",
+        "job_id": job.id,
+        "type": job.type,
+        "type_title": job_type.title,
+        "status": status,
+        "owner": job.owner.username if job.owner else None,
+        "title": result_title(job, status),
+        "run_url": run_url,
+        "result_urls": list(urls),
+        "error": job.error if status == JobStatus.FAILED else None,
+    }
+
+
+def result_title(job: Job, status: JobStatus) -> str | None:
+    if status != JobStatus.SUCCEEDED or job.result is None:
+        return None
+    title = job.result.get("title")
+    return title if isinstance(title, str) else None
+
+
+def build_subscription_delivery(
+    label: str, subscription: Subscription, payload: JsonObject
+) -> Delivery:
+    headers = {"X-Webhook-Signature": sign(subscription.signing_key, payload)}
+    return Delivery(label, subscription.url, payload, headers)
 
 
 def describe(job: Job, status: JobStatus, run_url: str, result_urls: list[str]) -> str:
@@ -138,30 +173,28 @@ class WebhookNotifier:
     def _deliveries(self, job_id: int, status: JobStatus) -> list[Delivery]:
         with self._sessions() as session:
             job = session.get_one(Job, job_id)
-            title = job_type_for(self._registry, job.type).title.lower()
+            job_type = job_type_for(self._registry, job.type)
+            title = job_type.title.lower()
             run_url = f"{self._base_url}/jobs/{job.id}"
             urls = result_urls(job, status)
-            details: JsonObject = {
-                "job_id": job.id,
-                "type": job.type,
-                "status": status,
-                "run_url": run_url,
-                "result_urls": list(urls),
-            }
-            public_message = announcement(job, status, title, run_url, urls)
-            deliveries = [
-                build_delivery(
-                    f"subscription for job {job.id}",
-                    Webhook.model_validate(subscription, from_attributes=True),
-                    public_message,
-                    details,
-                )
-                for subscription in session.scalars(select(Subscription))
-                if job.queued_at is not None
-            ]
+            deliveries: list[Delivery] = []
+            if job.queued_at is not None:
+                payload = job_event_payload(job, job_type, status, run_url, urls)
+                label = f"subscription for job {job.id}"
+                deliveries += [
+                    build_subscription_delivery(label, subscription, payload)
+                    for subscription in session.scalars(select(Subscription))
+                ]
             if job.webhook is not None and status in NOTIFIED_STATUSES:
                 message = f"your {title} #{job.id} {describe(job, status, run_url, urls)}"
                 webhook = Webhook.model_validate(job.webhook)
+                details: JsonObject = {
+                    "job_id": job.id,
+                    "type": job.type,
+                    "status": status,
+                    "run_url": run_url,
+                    "result_urls": list(urls),
+                }
                 deliveries.append(
                     build_delivery(f"webhook for job {job.id}", webhook, message, details)
                 )
@@ -180,9 +213,7 @@ class WebhookNotifier:
     async def _post(self, delivery: Delivery) -> str | None:
         try:
             response = await self._http.post(
-                delivery.url,
-                json=delivery.payload,
-                headers={"Authorization": f"Bearer {delivery.token}"},
+                delivery.url, json=delivery.payload, headers=delivery.headers
             )
         except httpx.TransportError as error:
             return type(error).__name__

@@ -135,9 +135,7 @@ class Subscription(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     url: Mapped[str] = mapped_column(unique=True)
-    token: Mapped[str]
-    extra_params: Mapped[JsonObject]
-    message_prefix: Mapped[str]
+    signing_key: Mapped[str]
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 

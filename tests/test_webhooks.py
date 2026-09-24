@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -9,6 +11,7 @@ import pytest
 import respx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from pydantic import JsonValue
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -21,8 +24,18 @@ from workflows.webhooks import Webhook, WebhookNotifier, build_delivery
 
 HOOK_URL = "https://client.example/hook"
 HOOK_TOKEN = "hook-secret"
+SIGNING_KEY = "a-signing-key-16"
 SERVICE_HEADERS = {"Authorization": f"Bearer {SERVICE_TOKEN}"}
 SUBMIT = {"type": "song", "params": {"prompt": "cats"}}
+
+
+def expected_signature(payload: JsonObject) -> str:
+    digest = hmac.new(
+        SIGNING_KEY.encode(), json.dumps(payload, sort_keys=True).encode(), hashlib.sha256
+    ).hexdigest()
+    return f"sha256={digest}"
+
+
 WEBHOOK: JsonObject = {
     "url": HOOK_URL,
     "token": HOOK_TOKEN,
@@ -217,44 +230,47 @@ async def test_run_notifies_status_changes_from_the_bus(
 SUB_URLS = ["https://one.example/hook", "https://two.example/hook"]
 
 
-def subscription(url: str, prefix: str = "") -> JsonObject:
-    return {
-        "url": url,
-        "token": HOOK_TOKEN,
-        "extra_params": {"target": "#all"},
-        "message_prefix": prefix,
-    }
+def subscription(url: str) -> JsonObject:
+    return {"url": url, "signing_key": SIGNING_KEY}
 
 
-def subscribe(client: TestClient, url: str, prefix: str = "") -> None:
+def subscribe(client: TestClient, url: str) -> None:
     response = client.put(
-        "/api/clients/subscription", json=subscription(url, prefix), headers=SERVICE_HEADERS
+        "/api/clients/subscription", json=subscription(url), headers=SERVICE_HEADERS
     )
     assert response.status_code == 200
 
 
 def test_subscription_endpoints_need_the_service_token(client: TestClient) -> None:
-    put = client.put("/api/clients/subscription", json={"url": HOOK_URL, "token": HOOK_TOKEN})
+    put = client.put("/api/clients/subscription", json=subscription(HOOK_URL))
     delete = client.delete("/api/clients/subscription", params={"url": HOOK_URL})
 
     assert (put.status_code, delete.status_code) == (401, 401)
 
 
 def test_put_subscription_upserts_by_url(client: TestClient, session: Session) -> None:
-    subscribe(client, HOOK_URL, "a: ")
+    subscribe(client, HOOK_URL)
     second = client.put(
-        "/api/clients/subscription", json=subscription(HOOK_URL, "b: "), headers=SERVICE_HEADERS
+        "/api/clients/subscription",
+        json={"url": HOOK_URL, "signing_key": "a-different-key-16"},
+        headers=SERVICE_HEADERS,
     )
 
     assert second.status_code == 200
-    assert second.json() == {
-        "url": HOOK_URL,
-        "extra_params": {"target": "#all"},
-        "message_prefix": "b: ",
-    }
-    assert HOOK_TOKEN not in second.text
+    assert second.json() == {"url": HOOK_URL}
+    assert "a-different-key-16" not in second.text
     stored = session.scalars(select(Subscription)).one()
-    assert (stored.url, stored.token, stored.message_prefix) == (HOOK_URL, HOOK_TOKEN, "b: ")
+    assert (stored.url, stored.signing_key) == (HOOK_URL, "a-different-key-16")
+
+
+def test_put_subscription_rejects_a_short_signing_key(client: TestClient) -> None:
+    response = client.put(
+        "/api/clients/subscription",
+        json={"url": HOOK_URL, "signing_key": "short"},
+        headers=SERVICE_HEADERS,
+    )
+
+    assert response.status_code == 422
 
 
 def test_delete_subscription(client: TestClient, session: Session) -> None:
@@ -270,13 +286,13 @@ def test_delete_subscription(client: TestClient, session: Session) -> None:
 
 @respx.mock
 @pytest.mark.parametrize(
-    ("status", "text"),
+    "status",
     [
-        (JobStatus.QUEUED, "mattf submitted a song, #{id}: {run_url}"),
-        (JobStatus.RUNNING, "mattf's song #{id} started"),
-        (JobStatus.SUCCEEDED, "mattf's song #{id} is done: " + " ".join(FILE_URLS)),
-        (JobStatus.FAILED, "mattf's song #{id} failed: the executor crashed"),
-        (JobStatus.CANCELLED, "mattf's song #{id} was cancelled"),
+        JobStatus.QUEUED,
+        JobStatus.RUNNING,
+        JobStatus.SUCCEEDED,
+        JobStatus.FAILED,
+        JobStatus.CANCELLED,
     ],
 )
 async def test_notify_posts_every_status_to_every_subscription(
@@ -285,37 +301,44 @@ async def test_notify_posts_every_status_to_every_subscription(
     services: Services,
     notifier: WebhookNotifier,
     status: JobStatus,
-    text: str,
 ) -> None:
     routes = [respx.post(url).respond(204) for url in SUB_URLS]
     for url in SUB_URLS:
-        subscribe(client, url, "hi: ")
+        subscribe(client, url)
     job = make_job(session, services, make_user(session, "mattf"))
     job.queued_at = utcnow()
     job.status = status
     job.error = "the executor crashed"
-    job.result = {"files": [{"url": url, "name": "a", "mime": "audio/mpeg"} for url in FILE_URLS]}
+    job.result = {
+        "files": [{"url": url, "name": "a", "mime": "audio/mpeg"} for url in FILE_URLS],
+        "title": "Cat Song",
+    }
     session.commit()
     run_url = f"{BASE_URL}/jobs/{job.id}"
+    result_urls: list[JsonValue] = list(FILE_URLS) if status == JobStatus.SUCCEEDED else []
+    expected_payload: JsonObject = {
+        "event": "job",
+        "job_id": job.id,
+        "type": "song",
+        "type_title": "Song",
+        "status": status,
+        "owner": "mattf",
+        "title": "Cat Song" if status == JobStatus.SUCCEEDED else None,
+        "run_url": run_url,
+        "result_urls": result_urls,
+        "error": "the executor crashed" if status == JobStatus.FAILED else None,
+    }
 
     await notifier.notify(job.id, status)
 
     for route in routes:
         request = route.calls.last.request
-        assert request.headers["Authorization"] == f"Bearer {HOOK_TOKEN}"
-        assert json.loads(request.content) == {
-            "target": "#all",
-            "message": "hi: " + text.format(id=job.id, run_url=run_url),
-            "job_id": job.id,
-            "type": "song",
-            "status": status,
-            "run_url": run_url,
-            "result_urls": FILE_URLS if status == JobStatus.SUCCEEDED else [],
-        }
+        assert json.loads(request.content) == expected_payload
+        assert request.headers["X-Webhook-Signature"] == expected_signature(expected_payload)
 
 
 @respx.mock
-async def test_notify_names_someone_for_jobs_without_an_owner(
+async def test_notify_names_no_owner_as_null_for_subscriptions(
     client: TestClient, session: Session, services: Services, notifier: WebhookNotifier
 ) -> None:
     route = respx.post(HOOK_URL).respond(204)
@@ -326,9 +349,7 @@ async def test_notify_names_someone_for_jobs_without_an_owner(
 
     await notifier.notify(job.id, JobStatus.CANCELLED)
 
-    assert json.loads(route.calls.last.request.content)["message"] == (
-        f"someone's song #{job.id} was cancelled"
-    )
+    assert json.loads(route.calls.last.request.content)["owner"] is None
 
 
 @respx.mock
@@ -376,9 +397,8 @@ async def test_web_submission_notifies_subscriptions_that_it_was_queued(
         await task
 
     job_id = response.json()["id"]
-    assert json.loads(route.calls.last.request.content)["message"] == (
-        f"mattf submitted a song, #{job_id}: {BASE_URL}/jobs/{job_id}"
-    )
+    payload = json.loads(route.calls.last.request.content)
+    assert (payload["job_id"], payload["status"], payload["owner"]) == (job_id, "queued", "mattf")
 
 
 @respx.mock
