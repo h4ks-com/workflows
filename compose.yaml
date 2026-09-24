@@ -1,6 +1,34 @@
 services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DEV_LOGIN: "true"
+      SESSION_SECRET: local-session-secret
+      BASE_URL: http://localhost:8000
+      SERVICE_TOKEN: local-service-token
+      WORKFLOWS_ADMIN_USERS: mattf
+      WORKFLOWS_EXECUTOR_TOKEN: fake-executor-key
+      EXECUTOR_URL_PARODY: http://localhost:9000/dispatch
+      EXECUTOR_URL_SONG: http://localhost:9000/dispatch
+      EXECUTOR_URL_VOICE: http://localhost:9000/dispatch
+      EXECUTOR_URL_PODCAST: http://localhost:9000/dispatch
+      YTDL_URL: http://localhost:9000
+      YTDL_API_KEY: fake-executor-key
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/healthz')"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+
+  # The executor shares the app's network so both reach each other on localhost,
+  # which keeps BASE_URL usable from the browser too.
   executor:
     build: ./e2e/fake_executor
+    network_mode: service:app
     environment:
       FAKE_EXECUTOR_API_KEY: fake-executor-key
     healthcheck:
@@ -8,27 +36,6 @@ services:
       interval: 2s
       timeout: 2s
       retries: 15
-
-  app:
-    build: .
-    ports:
-      - "8000:8000"
-    environment:
-      DEV_LOGIN: "true"
-      SESSION_SECRET: e2e-session-secret
-      BASE_URL: http://app:8000
-      SERVICE_TOKEN: e2e-service-token
-      WORKFLOWS_ADMIN_USERS: root
-      WORKFLOWS_EXECUTOR_TOKEN: fake-executor-key
-      EXECUTOR_URL_PARODY: http://executor:9000/dispatch
-      EXECUTOR_URL_SONG: http://executor:9000/dispatch
-      YTDL_URL: http://executor:9000
-      YTDL_API_KEY: fake-executor-key
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/healthz')"]
-      interval: 2s
-      timeout: 2s
-      retries: 15
     depends_on:
-      executor:
-        condition: service_healthy
+      app:
+        condition: service_started
