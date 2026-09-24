@@ -100,7 +100,7 @@ async def partial_queue(page: PageCtx) -> Response:
     return render(page, "_queue_panel.html", _queue_context(page.session, page.services))
 
 
-def _order_context(
+def _submit_context(
     page: Page, job_type: JobType, error: str | None = None, prefill: JsonObject | None = None
 ) -> Context:
     fields = field_specs(job_type.params_model.model_json_schema())
@@ -118,14 +118,14 @@ def _order_context(
     }
 
 
-@router.get("/order/{type_name}")
-async def order_page(
+@router.get("/submit/{type_name}")
+async def submit_page(
     type_name: str, page: PageCtx, from_job: Annotated[int | None, Query(alias="from")] = None
 ) -> Response:
     job_type = get_job_type(page.services, type_name)
     source = page.session.get(Job, from_job) if from_job is not None else None
     prefill = source.params if source is not None and source.type == type_name else None
-    return render(page, "order.html", _order_context(page, job_type, prefill=prefill))
+    return render(page, "submit.html", _submit_context(page, job_type, prefill=prefill))
 
 
 async def _price_form(page: Page, job_type: JobType, form: FormData) -> Context:
@@ -137,8 +137,8 @@ async def _price_form(page: Page, job_type: JobType, form: FormData) -> Context:
     return {"quote": quote_view(priced)}
 
 
-@router.post("/order/{type_name}/quote")
-async def order_quote(type_name: str, page: PageCtx) -> Response:
+@router.post("/submit/{type_name}/quote")
+async def submit_quote(type_name: str, page: PageCtx) -> Response:
     job_type = get_job_type(page.services, type_name)
     context: Context = {"job_type": type_view(job_type), "quote": None, "error": None}
     if not job_type.available:
@@ -153,10 +153,10 @@ async def order_quote(type_name: str, page: PageCtx) -> Response:
     return render(page, "_quote_panel.html", context)
 
 
-@router.post("/order/{type_name}")
-async def order_submit(type_name: str, page: PageCtx) -> Response:
+@router.post("/submit/{type_name}")
+async def submit_job(type_name: str, page: PageCtx) -> Response:
     if page.user is None:
-        return login_redirect(f"/order/{type_name}")
+        return login_redirect(f"/submit/{type_name}")
     job_type = get_job_type(page.services, type_name)
     form = await verified_form(page.request)
     return await _create_and_redirect(page, page.user, job_type, form)
@@ -171,15 +171,15 @@ async def _create_and_redirect(
     except HTTPException as error:
         if error.status_code != status.HTTP_422_UNPROCESSABLE_CONTENT:
             raise
-        return render(page, "order.html", _order_context(page, job_type, FORM_INVALID), 422)
+        return render(page, "submit.html", _submit_context(page, job_type, FORM_INVALID), 422)
     except ProbeError:
-        return render(page, "order.html", _order_context(page, job_type, PROBE_FAILED), 502)
+        return render(page, "submit.html", _submit_context(page, job_type, PROBE_FAILED), 502)
     job = create_job(page.session, job_type, params, priced, user)
     try:
         enqueue(page.session, job, user)
     except InsufficientCreditsError:
         page.session.rollback()
-        return render(page, "order.html", _order_context(page, job_type, TOPUP_HINT), 402)
+        return render(page, "submit.html", _submit_context(page, job_type, TOPUP_HINT), 402)
     page.session.commit()
     announce(page.services.bus, job)
     return RedirectResponse(f"/jobs/{job.id}", status_code=303)

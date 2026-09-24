@@ -52,7 +52,7 @@ IdentityStr = Annotated[
 
 class ClientJobRequest(QuoteRequest):
     identity: IdentityStr | None = Field(
-        None, description="Identity acting for this job, or null for an anonymous order."
+        None, description="Identity acting for this job, or null for an anonymous submission."
     )
     webhook: Webhook | None = Field(None, description="Where to post every status change.")
 

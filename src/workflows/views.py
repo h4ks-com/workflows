@@ -23,7 +23,7 @@ class JobTypeView(BaseModel):
     title: str = Field(description="Human readable name.")
     description: str = Field(description="What the job produces.")
     pricing: str = Field(description="How the quote is computed.")
-    available: bool = Field(description="Whether the job type accepts orders now.")
+    available: bool = Field(description="Whether the job type accepts submissions now.")
     params_schema: JsonObject = Field(description="JSON schema of the job parameters.")
     steps: list[StepView] = Field(description="Steps in execution order.")
 
@@ -58,7 +58,7 @@ class JobView(BaseModel):
     result: JsonObject | None = Field(description="Files and title the executor produced.")
     removed_at: datetime | None = Field(description="When an admin removed the result files.")
     error: str | None = Field(description="Why the job failed.")
-    created_at: datetime = Field(description="When the job was ordered.")
+    created_at: datetime = Field(description="When the job was submitted.")
     queued_at: datetime | None = Field(description="When credits were reserved.")
     started_at: datetime | None = Field(description="When the executor got the job.")
     finished_at: datetime | None = Field(description="When the job ended.")

@@ -70,13 +70,13 @@ async def test_list_jobs_filters_by_user_and_orders_newest_first(
     assert [job.id for job in result.data] == [second.id]
 
 
-async def test_how_to_order_lists_web_order_urls(app: FastAPI) -> None:
+async def test_how_to_submit_lists_web_submit_urls(app: FastAPI) -> None:
     async with Client(app.state.mcp) as client:
-        result = await client.call_tool("how_to_order", {})
+        result = await client.call_tool("how_to_submit", {})
 
     entries = {entry.type: entry for entry in result.data}
     assert (entries["parody"].available, entries["parody"].web_url) == (
         True,
-        "https://workflows.example/order/parody",
+        "https://workflows.example/submit/parody",
     )
     assert entries["voice"].available is False

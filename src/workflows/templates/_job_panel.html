@@ -13,7 +13,7 @@
       <span>cost</span><span>{{ detail.quote }} credits</span>
       {% if detail.status == 'queued' and detail.position is not none %}<span>place in line</span><span>#{{ detail.position }}</span>{% endif %}
     </div>
-    {% if job_type.available %}<a class="btn" href="/order/{{ detail.type }}?from={{ detail.id }}">edit and run again</a>{% endif %}
+    {% if job_type.available %}<a class="btn" href="/submit/{{ detail.type }}?from={{ detail.id }}">edit and run again</a>{% endif %}
   </div>
 </div>
 
@@ -27,7 +27,7 @@
 </div>
 {% endif %}
 {% if detail.status == 'awaiting_confirmation' %}
-<div class="notice warn">waiting for the person who ordered it to confirm and pay.</div>
+<div class="notice warn">waiting for the person who submitted it to confirm and pay.</div>
 {% elif detail.status == 'cancelled' %}
 <div class="notice">cancelled. the credits were refunded.</div>
 {% elif detail.status == 'failed' %}

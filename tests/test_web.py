@@ -64,61 +64,61 @@ def test_partial_queue_returns_fragment_only(client: TestClient) -> None:
     assert "<!doctype html>" not in response.text.lower()
 
 
-def test_order_page_renders_fields_for_available_type(client: TestClient) -> None:
-    response = client.get("/order/song")
+def test_submit_page_renders_fields_for_available_type(client: TestClient) -> None:
+    response = client.get("/submit/song")
 
     assert response.status_code == 200
     assert 'name="prompt"' in response.text
     assert 'name="seconds"' in response.text
 
 
-def test_order_page_shows_coming_soon_for_unavailable_type(client: TestClient) -> None:
-    response = client.get("/order/voice")
+def test_submit_page_shows_coming_soon_for_unavailable_type(client: TestClient) -> None:
+    response = client.get("/submit/voice")
 
     assert response.status_code == 200
     assert "not available yet" in response.text
 
 
-def test_order_page_unknown_type_is_404(client: TestClient) -> None:
-    assert client.get("/order/nope").status_code == 404
+def test_submit_page_unknown_type_is_404(client: TestClient) -> None:
+    assert client.get("/submit/nope").status_code == 404
 
 
-def test_order_quote_preview_shows_price(client: TestClient) -> None:
+def test_submit_quote_preview_shows_price(client: TestClient) -> None:
     response = client.post(
-        "/order/song/quote", data={"prompt": "cats", "seconds": "150", "model": "ace-step"}
+        "/submit/song/quote", data={"prompt": "cats", "seconds": "150", "model": "ace-step"}
     )
 
     assert response.status_code == 200
     assert "credits" in response.text
 
 
-def test_order_quote_preview_invalid_params_shows_hint(client: TestClient) -> None:
-    response = client.post("/order/song/quote", data={"seconds": "150"})
+def test_submit_quote_preview_invalid_params_shows_hint(client: TestClient) -> None:
+    response = client.post("/submit/song/quote", data={"seconds": "150"})
 
     assert "fill in the required fields" in response.text
 
 
-def test_order_submit_redirects_to_login_when_logged_out(client: TestClient) -> None:
-    response = client.post("/order/song", data={"prompt": "cats"}, follow_redirects=False)
+def test_submit_redirects_to_login_when_logged_out(client: TestClient) -> None:
+    response = client.post("/submit/song", data={"prompt": "cats"}, follow_redirects=False)
 
     assert response.status_code == 303
-    assert response.headers["location"] == "/login?next=/order/song"
+    assert response.headers["location"] == "/login?next=/submit/song"
 
 
-def test_order_submit_requires_csrf_token(client: TestClient, session: Session) -> None:
+def test_submit_requires_csrf_token(client: TestClient, session: Session) -> None:
     log_in(client, make_user(session, "alice"))
 
-    response = client.post("/order/song", data={"csrf_token": "wrong", "prompt": "cats"})
+    response = client.post("/submit/song", data={"csrf_token": "wrong", "prompt": "cats"})
 
     assert response.status_code == 403
 
 
-def test_order_submit_creates_job_and_redirects(client: TestClient, session: Session) -> None:
+def test_submit_creates_job_and_redirects(client: TestClient, session: Session) -> None:
     log_in(client, make_user(session, "alice", paid_credits=1000))
-    page = client.get("/order/song")
+    page = client.get("/submit/song")
 
     response = client.post(
-        "/order/song",
+        "/submit/song",
         data={
             "csrf_token": csrf_from(page.text),
             "prompt": "cats",
@@ -132,28 +132,28 @@ def test_order_submit_creates_job_and_redirects(client: TestClient, session: Ses
     assert response.headers["location"].startswith("/jobs/")
 
 
-def test_order_submit_invalid_params_rerenders_form(client: TestClient, session: Session) -> None:
+def test_submit_invalid_params_rerenders_form(client: TestClient, session: Session) -> None:
     log_in(client, make_user(session, "alice", paid_credits=1000))
-    page = client.get("/order/song")
+    page = client.get("/submit/song")
 
     response = client.post(
-        "/order/song", data={"csrf_token": csrf_from(page.text), "seconds": "150"}
+        "/submit/song", data={"csrf_token": csrf_from(page.text), "seconds": "150"}
     )
 
     assert response.status_code == 422
     assert "check the form" in response.text
 
 
-def test_order_submit_insufficient_credits_shows_topup_hint(
+def test_submit_insufficient_credits_shows_topup_hint(
     client: TestClient, session: Session, prober: FakeProber
 ) -> None:
     long_url = "https://youtube.example/watch?v=long"
     prober.durations[long_url] = 400.0
     log_in(client, make_user(session, "alice", paid_credits=0))
-    page = client.get("/order/parody")
+    page = client.get("/submit/parody")
 
     response = client.post(
-        "/order/parody", data={"csrf_token": csrf_from(page.text), "url": long_url}
+        "/submit/parody", data={"csrf_token": csrf_from(page.text), "url": long_url}
     )
 
     assert response.status_code == 402
@@ -354,31 +354,29 @@ def test_wallet_unlinks_an_identity(client: TestClient, session: Session) -> Non
     assert session.scalar(select(ExternalIdentity)) is None
 
 
-def test_order_submit_with_non_numeric_input_rerenders_form(
-    client: TestClient, session: Session
-) -> None:
+def test_submit_with_non_numeric_input_rerenders_form(client: TestClient, session: Session) -> None:
     log_in(client, make_user(session, "alice"))
-    page = client.get("/order/song")
+    page = client.get("/submit/song")
 
     response = client.post(
-        "/order/song",
+        "/submit/song",
         data={"csrf_token": csrf_from(page.text), "prompt": "cats", "seconds": "abc"},
     )
-    quote = client.post("/order/song/quote", data={"prompt": "cats", "seconds": "abc"})
+    quote = client.post("/submit/song/quote", data={"prompt": "cats", "seconds": "abc"})
 
     assert response.status_code == 422
     assert "check the form" in response.text
     assert "fill in the required fields" in quote.text
 
 
-def test_order_shows_probe_failures(client: TestClient, session: Session) -> None:
+def test_submit_shows_probe_failures(client: TestClient, session: Session) -> None:
     unknown_url = "https://youtube.example/watch?v=missing"
     log_in(client, make_user(session, "alice"))
-    page = client.get("/order/parody")
+    page = client.get("/submit/parody")
 
-    quote = client.post("/order/parody/quote", data={"url": unknown_url})
+    quote = client.post("/submit/parody/quote", data={"url": unknown_url})
     response = client.post(
-        "/order/parody", data={"csrf_token": csrf_from(page.text), "url": unknown_url}
+        "/submit/parody", data={"csrf_token": csrf_from(page.text), "url": unknown_url}
     )
 
     assert "we could not read it" in quote.text
@@ -386,8 +384,8 @@ def test_order_shows_probe_failures(client: TestClient, session: Session) -> Non
     assert "we could not read it" in response.text
 
 
-def test_order_page_uses_textareas_for_long_text(client: TestClient) -> None:
-    text = client.get("/order/song").text
+def test_submit_page_uses_textareas_for_long_text(client: TestClient) -> None:
+    text = client.get("/submit/song").text
 
     assert '<textarea id="f-prompt"' in text
     assert '<input id="f-style" type="text"' in text
@@ -468,23 +466,23 @@ def test_results_play_audio_and_link_other_files(
     assert 'href="https://bucket.example/clip.mp4"' in home
 
 
-def test_order_page_prefills_from_an_earlier_job(
+def test_submit_page_prefills_from_an_earlier_job(
     client: TestClient, session: Session, services: Services
 ) -> None:
     job = make_job(session, services, None)
 
-    response = client.get(f"/order/song?from={job.id}")
+    response = client.get(f"/submit/song?from={job.id}")
 
     assert response.status_code == 200
     assert "a song about cats</textarea>" in response.text
 
 
-def test_order_page_ignores_a_job_of_another_type(
+def test_submit_page_ignores_a_job_of_another_type(
     client: TestClient, session: Session, services: Services
 ) -> None:
     job = make_job(session, services, None)
 
-    response = client.get(f"/order/parody?from={job.id}")
+    response = client.get(f"/submit/parody?from={job.id}")
 
     assert "a song about cats" not in response.text
 
@@ -494,7 +492,7 @@ def test_job_page_offers_to_run_it_again(
 ) -> None:
     job = make_job(session, services, None)
 
-    assert f"/order/song?from={job.id}" in client.get(f"/jobs/{job.id}").text
+    assert f"/submit/song?from={job.id}" in client.get(f"/jobs/{job.id}").text
 
 
 def test_admin_page_lists_jobs_with_actions(

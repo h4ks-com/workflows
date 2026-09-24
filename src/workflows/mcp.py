@@ -18,10 +18,10 @@ from workflows.views import (
 )
 
 
-class HowToOrderEntry(BaseModel):
+class HowToSubmitEntry(BaseModel):
     type: str = Field(description="Job type name.")
-    available: bool = Field(description="Whether the job type accepts orders now.")
-    web_url: str = Field(description="Web page to order this job type.")
+    available: bool = Field(description="Whether the job type accepts submissions now.")
+    web_url: str = Field(description="Web page to submit this job type.")
 
 
 def build_mcp(services: Services) -> FastMCP:
@@ -34,7 +34,7 @@ def build_mcp(services: Services) -> FastMCP:
 
     @mcp.tool
     async def quote(type: str, params: JsonObject) -> QuoteView:
-        """Price a job without ordering it."""
+        """Price a job without submitting it."""
         _, _, priced = await price_request(services, QuoteRequest(type=type, params=params))
         return quote_view(priced)
 
@@ -58,14 +58,14 @@ def build_mcp(services: Services) -> FastMCP:
             return job_views(session, services, user, limit)
 
     @mcp.tool
-    def how_to_order() -> list[HowToOrderEntry]:
-        """Show the web order URL for each job type. Clients can also submit jobs via the API."""
+    def how_to_submit() -> list[HowToSubmitEntry]:
+        """Show the web submit URL for each job type. Clients can also submit jobs via the API."""
         base_url = services.settings.base_url
         return [
-            HowToOrderEntry(
+            HowToSubmitEntry(
                 type=job_type.name,
                 available=job_type.available,
-                web_url=f"{base_url}/order/{job_type.name}",
+                web_url=f"{base_url}/submit/{job_type.name}",
             )
             for job_type in services.registry.values()
         ]

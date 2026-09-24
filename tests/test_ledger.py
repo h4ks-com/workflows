@@ -157,7 +157,7 @@ def free_grants(session: Session, user: User) -> int:
     return session.scalar(query) or 0
 
 
-async def test_concurrent_orders_each_pay_their_quote(
+async def test_concurrent_submissions_each_pay_their_quote(
     app: FastAPI, session: Session, prober: FakeProber
 ) -> None:
     user = make_user(session, "alice", paid_credits=1000)
