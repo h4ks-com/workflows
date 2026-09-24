@@ -10,10 +10,7 @@ services:
       SERVICE_TOKEN: local-service-token
       WORKFLOWS_ADMIN_USERS: mattf
       WORKFLOWS_EXECUTOR_TOKEN: fake-executor-key
-      EXECUTOR_URL_PARODY: http://localhost:9000/dispatch
-      EXECUTOR_URL_SONG: http://localhost:9000/dispatch
-      EXECUTOR_URL_VOICE: http://localhost:9000/dispatch
-      EXECUTOR_URL_PODCAST: http://localhost:9000/dispatch
+      N8N_URL: http://localhost:9000
       YTDL_URL: http://localhost:9000
       YTDL_API_KEY: fake-executor-key
     extra_hosts:

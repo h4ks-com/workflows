@@ -49,12 +49,20 @@ async def test_quote_probes_only_types_with_media() -> None:
 
 
 def test_registry_marks_types_without_executor_unavailable() -> None:
-    registry = build_registry({"parody": "https://n8n/webhook/parody"})
+    registry = build_registry("")
 
     assert list(registry) == ["parody", "song", "voice", "podcast", "image"]
-    assert registry["parody"].available
+    assert not registry["parody"].available
     assert not registry["voice"].available
     assert registry["podcast"].step_names() == ["research", "cast", "bed", "write", "speak", "mix"]
+
+
+def test_build_registry_derives_urls_from_n8n_url() -> None:
+    registry = build_registry("https://n8n.test")
+
+    assert registry["parody"].executor_url == "https://n8n.test/webhook/workflows-parody"
+    assert registry["parody"].available
+    assert not registry["voice"].available
 
 
 @respx.mock

@@ -125,7 +125,7 @@ def create_app(settings: Settings | None = None, prober: Prober | None = None) -
     probe_http = httpx.AsyncClient(limits=PROBE_LIMITS)
     engine = connect(settings.database_url)
     sessions = session_factory(engine)
-    registry = build_registry(settings.executor_urls)
+    registry = build_registry(settings.n8n_url)
     bus = EventBus()
     worker = QueueWorker(sessions, registry, bus, http, settings)
     beans_poller = BeansPoller(sessions, http, settings) if settings.beans_token else None

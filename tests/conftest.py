@@ -2,6 +2,7 @@ import asyncio
 import json
 from base64 import b64encode
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from itsdangerous import TimestampSigner
 from sqlalchemy import Engine, func, select
 from sqlalchemy.orm import Session
 
+from workflows import jobtypes
 from workflows.app import create_app
 from workflows.auth import SESSION_USER_KEY
 from workflows.db import Job, LedgerEntry, User
@@ -24,10 +26,21 @@ SESSION_SECRET = "test-secret"
 SERVICE_TOKEN = "service-token"
 EXECUTOR_TOKEN = "executor-token"
 BASE_URL = "https://workflows.example"
-PARODY_EXECUTOR = "https://n8n.example/webhook/parody"
-SONG_EXECUTOR = "https://n8n.example/webhook/song"
+N8N_URL = "https://n8n.test"
+PARODY_EXECUTOR = "https://n8n.test/webhook/workflows-parody"
+SONG_EXECUTOR = "https://n8n.test/webhook/workflows-song"
 SONG_URL = "https://youtube.example/watch?v=song"
 FETCH_HEADERS = {"X-Requested-With": "fetch"}
+NO_EXECUTOR_YET = {"voice", "podcast", "image"}
+
+
+@pytest.fixture(autouse=True)
+def _limit_available_job_types(monkeypatch: pytest.MonkeyPatch) -> None:
+    patched = tuple(
+        replace(job_type, webhook=None) if job_type.name in NO_EXECUTOR_YET else job_type
+        for job_type in jobtypes.JOB_TYPES
+    )
+    monkeypatch.setattr(jobtypes, "JOB_TYPES", patched)
 
 
 class FakeProber:
@@ -50,7 +63,7 @@ def settings(tmp_path: Path) -> Settings:
         base_url=BASE_URL,
         service_token=SERVICE_TOKEN,
         admin_users=frozenset({"root"}),
-        executor_urls={"parody": PARODY_EXECUTOR, "song": SONG_EXECUTOR},
+        n8n_url=N8N_URL,
         executor_token=EXECUTOR_TOKEN,
     )
 

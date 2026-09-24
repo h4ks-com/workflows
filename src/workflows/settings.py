@@ -1,6 +1,6 @@
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 CREDITS_PER_BEAN = 100
 FREE_DAILY_CREDITS = 500
@@ -10,7 +10,6 @@ DEFAULT_YTDL_URL = "http://ytdl.ytdl.svc.cluster.local:8000"
 DEFAULT_BEANS_URL = "https://beans.h4ks.com"
 DEFAULT_EXECUTOR_TIMEOUT_FACTOR = 3.0
 DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS = 120
-EXECUTOR_URL_PREFIX = "EXECUTOR_URL_"
 
 
 @dataclass(frozen=True)
@@ -20,7 +19,7 @@ class Settings:
     base_url: str = DEFAULT_BASE_URL
     service_token: str = ""
     admin_users: frozenset[str] = frozenset()
-    executor_urls: Mapping[str, str] = field(default_factory=dict)
+    n8n_url: str = ""
     executor_token: str = ""
     executor_timeout_factor: float = DEFAULT_EXECUTOR_TIMEOUT_FACTOR
     first_event_timeout_seconds: int = DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS
@@ -34,18 +33,10 @@ class Settings:
     dev_login: bool = False
 
     def __post_init__(self) -> None:
-        if any(self.executor_urls.values()) and not self.executor_token:
-            raise ValueError("WORKFLOWS_EXECUTOR_TOKEN is required when an executor URL is set")
+        if self.n8n_url and not self.executor_token:
+            raise ValueError("WORKFLOWS_EXECUTOR_TOKEN is required when N8N_URL is set")
         if self.dev_login and self.base_url.startswith("https://"):
             raise ValueError("DEV_LOGIN cannot be enabled when BASE_URL is https")
-
-
-def _executor_urls(environ: Mapping[str, str]) -> dict[str, str]:
-    return {
-        name.removeprefix(EXECUTOR_URL_PREFIX).lower(): url
-        for name, url in environ.items()
-        if name.startswith(EXECUTOR_URL_PREFIX)
-    }
 
 
 def _username_list(raw: str) -> frozenset[str]:
@@ -59,7 +50,7 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
         base_url=environ.get("BASE_URL", DEFAULT_BASE_URL).rstrip("/"),
         service_token=environ.get("SERVICE_TOKEN", ""),
         admin_users=_username_list(environ.get("WORKFLOWS_ADMIN_USERS", "")),
-        executor_urls=_executor_urls(environ),
+        n8n_url=environ.get("N8N_URL", "").rstrip("/"),
         executor_token=environ.get("WORKFLOWS_EXECUTOR_TOKEN", ""),
         executor_timeout_factor=float(
             environ.get("EXECUTOR_TIMEOUT_FACTOR", DEFAULT_EXECUTOR_TIMEOUT_FACTOR)

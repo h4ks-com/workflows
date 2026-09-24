@@ -68,7 +68,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._json(200, {"duration": 180, "title": "test"})
             return
-        if self.path == "/dispatch":
+        if self.path.startswith("/webhook/"):
             if not self._authorized("X-API-Key"):
                 self._json(401, {"detail": "invalid api key"})
                 return

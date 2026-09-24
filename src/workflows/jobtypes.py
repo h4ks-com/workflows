@@ -1,6 +1,5 @@
 import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import Literal, Protocol
 
@@ -239,6 +238,7 @@ class JobType:
     pricing: str
     params_model: type[JobParams]
     steps: tuple[Step, ...]
+    webhook: str | None = None
     executor_url: str = ""
 
     @property
@@ -281,6 +281,7 @@ JOB_TYPES = (
             ("sing", 50),
             ("splice", 10),
         ),
+        webhook="workflows-parody",
     ),
     JobType(
         name="song",
@@ -289,6 +290,7 @@ JOB_TYPES = (
         pricing="0.3 credits per second (1.8 with minimax) + 60",
         params_model=SongParams,
         steps=_steps(("write", 20), ("generate", 70), ("store", 10)),
+        webhook="workflows-song",
     ),
     JobType(
         name="voice",
@@ -297,6 +299,7 @@ JOB_TYPES = (
         pricing="2 credits per second of song + 90",
         params_model=VoiceParams,
         steps=_steps(("fetch", 10), ("separate", 30), ("convert", 45), ("mix", 15)),
+        webhook="workflows-voice",
     ),
     JobType(
         name="podcast",
@@ -307,6 +310,7 @@ JOB_TYPES = (
         steps=_steps(
             ("research", 10), ("cast", 5), ("bed", 15), ("write", 20), ("speak", 40), ("mix", 10)
         ),
+        webhook="workflows-podcast",
     ),
     JobType(
         name="image",
@@ -315,6 +319,7 @@ JOB_TYPES = (
         pricing="40 credits per image",
         params_model=ImageParams,
         steps=_steps(("generate", 85), ("store", 15)),
+        webhook="workflows-image",
     ),
 )
 
@@ -335,8 +340,13 @@ def retired_type(name: str) -> JobType:
     )
 
 
-def build_registry(executor_urls: Mapping[str, str]) -> dict[str, JobType]:
+def build_registry(n8n_url: str) -> dict[str, JobType]:
     return {
-        job_type.name: replace(job_type, executor_url=executor_urls.get(job_type.name, ""))
+        job_type.name: replace(
+            job_type,
+            executor_url=f"{n8n_url.rstrip('/')}/webhook/{job_type.webhook}"
+            if n8n_url and job_type.webhook
+            else "",
+        )
         for job_type in JOB_TYPES
     }
