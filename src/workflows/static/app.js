@@ -39,6 +39,7 @@
       const hidden = seg.closest(".seg").nextElementSibling;
       if (hidden && hidden.matches("input[type=hidden]")) {
         hidden.value = seg.dataset.value || seg.textContent.trim();
+        applyShowWhen();
         hidden.dispatchEvent(new Event("change", { bubbles: true }));
       }
     }
@@ -119,14 +120,15 @@
     applyShowWhen();
   });
 
-  // A field that only makes sense for some choices declares them; we hide it and clear it otherwise.
+  // A field that only makes sense for some choices declares them; we hide and disable it otherwise,
+  // so the form leaves it out and the value comes back when the choice does.
   function applyShowWhen() {
     document.querySelectorAll("[data-show-when]").forEach((field) => {
       const form = field.closest("form");
       const rules = JSON.parse(field.dataset.showWhen);
       const visible = Object.entries(rules).every(([name, value]) => form.elements[name]?.value === value);
       field.hidden = !visible;
-      if (!visible) field.querySelectorAll("input, textarea").forEach((input) => { if (input.type !== "file") input.value = ""; });
+      field.querySelectorAll("input, textarea").forEach((input) => { input.disabled = !visible; });
     });
   }
   document.addEventListener("DOMContentLoaded", applyShowWhen);

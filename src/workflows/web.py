@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
-from pydantic import ValidationError
+from pydantic import JsonValue, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.datastructures import FormData
@@ -149,8 +149,23 @@ async def submit_quote(type_name: str, page: PageCtx) -> Response:
     except HTTPException as error:
         if error.status_code != status.HTTP_422_UNPROCESSABLE_CONTENT:
             raise
-        context["error"] = "fill in the required fields to see the cost"
+        context["error"] = form_error(job_type, error.detail)
     return render(page, "_quote_panel.html", context)
+
+
+def form_error(job_type: JobType, detail: JsonValue) -> str:
+    first = detail[0] if isinstance(detail, list) and detail else None
+    if not isinstance(first, dict):
+        return FORM_INVALID
+    labels = {spec.name: spec.label.lower() for spec in job_type.form.fields}
+    location = first.get("loc")
+    field = (
+        labels.get(str(location[-1])) if isinstance(location, list | tuple) and location else None
+    )
+    if first.get("type") == "missing":
+        return f"fill in {field} to see the cost" if field else FORM_INVALID
+    message = str(first.get("msg", "")).removeprefix("Value error, ").lower()
+    return f"check {field}: {message}" if field else f"check the form: {message}"
 
 
 @router.post("/submit/{type_name}")

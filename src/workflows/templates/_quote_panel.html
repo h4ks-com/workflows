@@ -1,7 +1,7 @@
 {% if error %}
 <p class="muted">{{ error }}</p>
 {% elif quote %}
-<div class="big">{{ quote.credits }} <small>credits</small></div>
+<div class="big">{{ quote.credits }} <small>{{ 'credit' if quote.credits == 1 else 'credits' }}</small></div>
 <div class="kv">
   {% if quote.probe %}
   <span>length</span><span>{{ (quote.probe.duration_seconds // 60)|int }}:{{ "%02d"|format(quote.probe.duration_seconds % 60) }}</span>
@@ -9,7 +9,7 @@
   {% endif %}
   <span>takes about</span><span>{{ ((quote.estimate_seconds + 59) // 60)|int }} min</span>
   <span>in beans</span><span>{{ quote.beans }}</span>
-  <span class="total">total</span><span class="total">{{ quote.credits }} credits</span>
+  <span class="total">total</span><span class="total">{{ quote.credits|credits }}</span>
 </div>
 {% else %}
 <p class="muted">fill in the form to see the cost.</p>

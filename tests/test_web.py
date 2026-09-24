@@ -95,7 +95,13 @@ def test_submit_quote_preview_shows_price(client: TestClient) -> None:
 def test_submit_quote_preview_invalid_params_shows_hint(client: TestClient) -> None:
     response = client.post("/submit/song/quote", data={"seconds": "150"})
 
-    assert "fill in the required fields" in response.text
+    assert "fill in prompt to see the cost" in response.text
+
+
+def test_submit_quote_preview_names_the_invalid_field(client: TestClient) -> None:
+    response = client.post("/submit/song/quote", data={"prompt": "cats", "model": "nope"})
+
+    assert "check model: choose one of ace-step, minimax" in response.text
 
 
 def test_submit_redirects_to_login_when_logged_out(client: TestClient) -> None:
@@ -368,7 +374,7 @@ def test_submit_with_non_numeric_input_rerenders_form(client: TestClient, sessio
 
     assert response.status_code == 422
     assert "check the form" in response.text
-    assert "fill in the required fields" in quote.text
+    assert "check length (seconds): input should be a valid integer" in quote.text
 
 
 def test_submit_shows_probe_failures(client: TestClient, session: Session) -> None:

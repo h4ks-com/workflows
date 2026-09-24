@@ -10,7 +10,7 @@
   <div class="run-side">
     <div class="kv">
       {% if detail.eta_seconds is not none %}<span>time left</span><span data-eta="{{ detail.eta_seconds }}">~{{ panel.eta_label }}</span>{% endif %}
-      <span>cost</span><span>{{ detail.quote }} credits</span>
+      <span>cost</span><span>{{ detail.quote|credits }}</span>
       {% if detail.status == 'queued' and detail.position is not none %}<span>place in line</span><span>#{{ detail.position }}</span>{% endif %}
     </div>
     {% if job_type.available %}<a class="btn" href="/submit/{{ detail.type }}?from={{ detail.id }}">edit and run again</a>{% endif %}
@@ -67,7 +67,9 @@
     </div>
     {% endif %}
     {% else %}
+    {% if detail.status != 'succeeded' or detail.removed_at %}
     <div class="res" style="background:var(--bg)"><button class="play" type="button" disabled style="opacity:.4">▶</button><div class="meta"><span class="t muted">{{ 'removed by an admin' if detail.removed_at else 'your result shows up here when the job is done' }}</span></div></div>
+    {% endif %}
     {% endfor %}
     <span class="label">activity</span>
     <div class="log">

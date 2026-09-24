@@ -194,7 +194,12 @@ def relative_time(value: datetime | None) -> str:
     return short_time(value)
 
 
+def credits(amount: int) -> str:
+    return f"{amount:,} credit" if amount == 1 else f"{amount:,} credits"
+
+
 templates.env.tests["playable"] = is_playable_url
+templates.env.filters["credits"] = credits
 templates.env.filters["status_label"] = status_label
 templates.env.filters["ledger_label"] = ledger_label
 templates.env.filters["short_time"] = short_time
