@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}runs · h4ks workflows{% endblock %}
+{% block content %}
+<section class="page">
+<h1>runs</h1>
+<nav class="seg filters" aria-label="filter by type">
+  <a href="/runs" class="{{ 'on' if not selected else '' }}">all</a>
+  {% for name in type_names %}<a href="/runs?type={{ name }}" class="{{ 'on' if selected == name else '' }}">{{ name }}</a>{% endfor %}
+</nav>
+<div class="panel">
+  <div class="feed">
+    {% for job in jobs %}
+    {% include "_result_row.html" %}
+    {% else %}
+    <p class="muted">nothing finished here yet. <a href="/#create">create a job</a>.</p>
+    {% endfor %}
+  </div>
+  {% if older %}<p><a class="btn ghost" href="/runs?{% if selected %}type={{ selected }}&amp;{% endif %}before={{ older }}">see older runs</a></p>{% endif %}
+</div>
+</section>
+{% endblock %}

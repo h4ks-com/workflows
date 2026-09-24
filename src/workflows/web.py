@@ -35,7 +35,14 @@ from workflows.ledger import InsufficientCreditsError
 from workflows.probe import ProbeError
 from workflows.settings import CREDITS_PER_BEAN, FREE_DAILY_CREDITS
 from workflows.state import Services
-from workflows.views import job_detail_view, job_views, queue_view, quote_view, type_view
+from workflows.views import (
+    finished_job_views,
+    job_detail_view,
+    job_views,
+    queue_view,
+    quote_view,
+    type_view,
+)
 from workflows.webviews import (
     TOPUP_HINT,
     Page,
@@ -54,6 +61,7 @@ type Context = dict[str, TemplateValue]
 RESERVED_STATUSES = (JobStatus.QUEUED, JobStatus.RUNNING)
 RECENT_RESULTS = 4
 USER_JOB_LIMIT = 50
+RUNS_PAGE = 30
 ADMIN_RECENT_JOBS = 50
 ADMIN_JOB_FETCH = 200
 PROBE_FAILED = "check the link, we could not read it"
@@ -84,7 +92,9 @@ def _queue_context(session: Session, services: Services) -> Context:
     recent = [
         job
         for job in job_views(session, services, None, 20)
-        if job.status == JobStatus.SUCCEEDED and job.removed_at is None
+        if job.status == JobStatus.SUCCEEDED
+        and job.removed_at is None
+        and services.catalog.get(job.type) is not None
     ][:RECENT_RESULTS]
     return {"queue": queue, "running": running, "types": types, "recent": recent}
 
@@ -374,6 +384,23 @@ async def admin_credits(page: PageCtx) -> Response:
     except InsufficientCreditsError as error:
         return _render_admin(page, str(error), status.HTTP_402_PAYMENT_REQUIRED)
     return RedirectResponse("/admin", status_code=303)
+
+
+@router.get("/runs")
+async def runs_page(
+    page: PageCtx,
+    type_name: Annotated[str | None, Query(alias="type")] = None,
+    before: int | None = None,
+) -> Response:
+    jobs = finished_job_views(page.session, page.services, type_name, before, RUNS_PAGE + 1)
+    context: Context = {
+        "active": "runs",
+        "jobs": jobs[:RUNS_PAGE],
+        "older": jobs[RUNS_PAGE - 1].id if len(jobs) > RUNS_PAGE else None,
+        "selected": type_name,
+        "type_names": [job_type.name for job_type in page.services.catalog.all()],
+    }
+    return render(page, "runs.html", context)
 
 
 @router.get("/u/{username}")

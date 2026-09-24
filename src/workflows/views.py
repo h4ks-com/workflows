@@ -159,6 +159,22 @@ def job_views(session: Session, services: Services, user: str | None, limit: int
     return [job_view(job, services.catalog.find(job.type)) for job in session.scalars(query)]
 
 
+def finished_job_views(
+    session: Session, services: Services, type_name: str | None, before: int | None, limit: int
+) -> list[JobView]:
+    query = (
+        select(Job)
+        .where(Job.status == JobStatus.SUCCEEDED, Job.removed_at.is_(None))
+        .order_by(Job.id.desc())
+        .limit(limit)
+    )
+    if type_name is not None:
+        query = query.where(Job.type == type_name)
+    if before is not None:
+        query = query.where(Job.id < before)
+    return [job_view(job, services.catalog.find(job.type)) for job in session.scalars(query)]
+
+
 def job_detail_view(session: Session, services: Services, job_id: int) -> JobDetailView:
     job = get_job_or_404(session, job_id)
     slot = Estimator(session).slot(job)

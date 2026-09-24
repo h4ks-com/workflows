@@ -54,20 +54,10 @@
 </div>
 
 <div class="panel">
-  <div class="row"><span class="label">just finished</span></div>
+  <div class="row"><span class="label">just finished</span><span class="spacer"></span><a class="muted" href="/runs">see all runs</a></div>
   <div class="feed">
     {% for job in recent %}
-    <div class="res">
-      {% set file = job.result.files[0] if job.result and job.result.files else none %}
-      {% if file and file.url is playable and file.mime.startswith('audio') %}
-      <button class="play" type="button" aria-label="play" data-src="{{ file.url }}">▶</button>
-      {% elif file and file.url is playable and file.mime.startswith('image') %}
-      <a href="{{ file.url }}"><img class="thumb" src="{{ file.url }}" alt=""></a>
-      {% elif file and file.url is playable %}
-      <a href="{{ file.url }}" class="muted">download</a>
-      {% endif %}
-      <div class="meta"><span class="t"><a href="/jobs/{{ job.id }}"><b>{{ job.result.title if job.result and job.result.title else job.type ~ ' #' ~ job.id }}</b></a> <span class="muted">· {{ job.type }}{% if job.owner %} · {{ job.owner }}{% endif %}</span></span>{% if file and file.mime.startswith('audio') %}<canvas class="wave" data-seed="{{ job.id }}"></canvas>{% endif %}</div>
-    </div>
+    {% include "_result_row.html" %}
     {% else %}
     <p class="muted">nothing finished yet.</p>
     {% endfor %}

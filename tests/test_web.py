@@ -605,3 +605,49 @@ def test_removed_job_hides_result_and_home_feed(
 
     assert "removed by an admin" in job_page.text
     assert f"/jobs/{job.id}" not in home.text
+
+
+def finished_job(session: Session, services: Services, title: str, type_name: str = "song") -> int:
+    job = queue_job(session, services, make_user(session, f"owner-{title}"))
+    start(job)
+    succeed(session, job, {"files": [], "title": title})
+    job.type = type_name
+    session.commit()
+    return job.id
+
+
+def test_runs_page_lists_finished_runs_for_anyone(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    finished_job(session, services, "first song")
+    queue_job(session, services, make_user(session, "waiting"))
+
+    page = client.get("/runs")
+
+    assert page.status_code == 200
+    assert "first song" in page.text
+    assert "nothing finished here yet" not in page.text
+
+
+def test_runs_page_filters_by_type_and_pages_older_runs(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    ids = [finished_job(session, services, f"run {index}") for index in range(31)]
+    finished_job(session, services, "a parody", "parody")
+
+    first = client.get("/runs?type=song")
+    older = client.get(f"/runs?type=song&before={ids[1]}")
+
+    assert "a parody" not in first.text
+    assert "run 30" in first.text and "run 0" not in first.text
+    assert f"before={ids[1]}" in first.text
+    assert "run 0" in older.text and "see older runs" not in older.text
+
+
+def test_home_leaves_out_runs_of_types_no_longer_offered(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    finished_job(session, services, "old echo run", "echo")
+
+    assert "old echo run" not in client.get("/").text
+    assert "old echo run" in client.get("/runs").text

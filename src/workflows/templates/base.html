@@ -16,6 +16,7 @@
     <a class="brand" href="/"><span class="mark">h4</span>workflows</a>
     <nav class="tabs" aria-label="screens">
       <a href="/" class="{{ 'on' if active == 'home' else '' }}">queue</a>
+      <a href="/runs" class="{{ 'on' if active == 'runs' else '' }}">runs</a>
       <a href="/wallet" class="{{ 'on' if active == 'wallet' else '' }}">wallet</a>
       {% if me and me.admin %}<a href="/admin" class="{{ 'on' if active == 'admin' else '' }}">admin</a>{% endif %}
     </nav>

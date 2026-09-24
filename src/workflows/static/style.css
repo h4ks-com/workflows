@@ -111,6 +111,7 @@ a.q:hover { background: var(--panel-2); }
 .res { display: grid; grid-template-columns: 40px 1fr; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--border); padding: 12px; }
 .play { width: 40px; height: 40px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font: 16px var(--mono); cursor: pointer; }
 .res .meta { display: grid; gap: 6px; min-width: 0; }
+.res > .meta:first-child { grid-column: 1 / -1; }
 .shot { display: block; max-width: 100%; border: 1px solid var(--border); }
 .thumb { display: block; width: 40px; height: 40px; object-fit: cover; border: 1px solid var(--border); }
 .wave { display: block; width: 100%; height: 36px; }
@@ -130,9 +131,10 @@ textarea { min-height: 96px; resize: vertical; font-family: var(--mono); font-si
 .upload input[type=url] { flex: 1; min-width: 0; }
 .upload.drop input[type=url] { border-color: var(--accent); background: var(--panel-2); }
 .seg { display: flex; border: 1px solid var(--border); }
-.seg button { flex: 1; font: 500 12px var(--mono); padding: 9px 8px; background: transparent; color: var(--mid); border: 0; border-left: 1px solid var(--border); cursor: pointer; }
-.seg button:first-child { border-left: 0; }
-.seg button.on { background: var(--panel-2); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+.seg button, .seg a { flex: 1; font: 500 12px var(--mono); padding: 9px 8px; background: transparent; color: var(--mid); border: 0; border-left: 1px solid var(--border); cursor: pointer; text-align: center; text-decoration: none; }
+.seg button:first-child, .seg a:first-child { border-left: 0; }
+.seg button.on, .seg a.on { background: var(--panel-2); color: var(--text); box-shadow: inset 0 -2px 0 var(--accent); }
+.filters { margin-bottom: 16px; flex-wrap: wrap; }
 .quote { position: sticky; top: 16px; }
 .quote .big { font: 600 34px var(--mono); color: var(--text); font-variant-numeric: tabular-nums; }
 .quote .big small { font-size: 14px; color: var(--dim); font-weight: 400; }
