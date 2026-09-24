@@ -65,6 +65,7 @@ def test_admin_health_reports_executors_and_poller(
         "song": True,
         "voice": False,
         "podcast": False,
+        "image": False,
     }
     assert response["worker_paused"] is False
     assert response["beans_poller_last_success"] is None

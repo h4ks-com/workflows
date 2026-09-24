@@ -209,6 +209,22 @@ class PodcastParams(JobParams):
         return round(90 * self.minutes + 120)
 
 
+class ImageParams(JobParams):
+    prompt: str = Field(
+        min_length=1,
+        max_length=LONG_TEXT,
+        json_schema_extra=MULTILINE,
+        title="Prompt",
+        description="What the image should show.",
+    )
+    shape: Literal["square", "portrait", "landscape"] = Field(
+        "square", title="Shape", description="Shape of the image."
+    )
+
+    def quote(self, probe: Probe | None) -> int:
+        return 40
+
+
 @dataclass(frozen=True)
 class Step:
     name: str
@@ -291,6 +307,14 @@ JOB_TYPES = (
         steps=_steps(
             ("research", 10), ("cast", 5), ("bed", 15), ("write", 20), ("speak", 40), ("mix", 10)
         ),
+    ),
+    JobType(
+        name="image",
+        title="Image",
+        description="Create an image from a description.",
+        pricing="40 credits per image",
+        params_model=ImageParams,
+        steps=_steps(("generate", 85), ("store", 15)),
     ),
 )
 

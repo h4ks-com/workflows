@@ -61,10 +61,12 @@
       {% set file = job.result.files[0] if job.result and job.result.files else none %}
       {% if file and file.url is playable and file.mime.startswith('audio') %}
       <button class="play" type="button" aria-label="play" data-src="{{ file.url }}">▶</button>
+      {% elif file and file.url is playable and file.mime.startswith('image') %}
+      <a href="{{ file.url }}"><img class="thumb" src="{{ file.url }}" alt=""></a>
       {% elif file and file.url is playable %}
       <a href="{{ file.url }}" class="muted">download</a>
       {% endif %}
-      <div class="meta"><span class="t"><b>{{ job.result.title if job.result and job.result.title else job.type ~ ' #' ~ job.id }}</b> <span class="muted">· {{ job.type }}{% if job.owner %} · {{ job.owner }}{% endif %}</span></span><canvas class="wave" data-seed="{{ job.id }}"></canvas></div>
+      <div class="meta"><span class="t"><b>{{ job.result.title if job.result and job.result.title else job.type ~ ' #' ~ job.id }}</b> <span class="muted">· {{ job.type }}{% if job.owner %} · {{ job.owner }}{% endif %}</span></span>{% if not (file and file.mime.startswith('image')) %}<canvas class="wave" data-seed="{{ job.id }}"></canvas>{% endif %}</div>
     </div>
     {% else %}
     <p class="muted">nothing finished yet.</p>

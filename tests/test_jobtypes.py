@@ -6,6 +6,7 @@ import respx
 
 from conftest import SONG_URL, FakeProber
 from workflows.jobtypes import (
+    ImageParams,
     ParodyParams,
     PodcastParams,
     Probe,
@@ -50,7 +51,7 @@ async def test_quote_probes_only_types_with_media() -> None:
 def test_registry_marks_types_without_executor_unavailable() -> None:
     registry = build_registry({"parody": "https://n8n/webhook/parody"})
 
-    assert list(registry) == ["parody", "song", "voice", "podcast"]
+    assert list(registry) == ["parody", "song", "voice", "podcast", "image"]
     assert registry["parody"].available
     assert not registry["voice"].available
     assert registry["podcast"].step_names() == ["research", "cast", "bed", "write", "speak", "mix"]
@@ -102,3 +103,7 @@ async def test_ytdl_prober_runs_at_most_four_probes_at_once() -> None:
         await asyncio.gather(*(prober.info(SONG_URL) for _ in range(10)))
 
     assert peak == 4
+
+
+def test_image_quote_is_flat() -> None:
+    assert ImageParams(prompt="a cat").quote(None) == 40

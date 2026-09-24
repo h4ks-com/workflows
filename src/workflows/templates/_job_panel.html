@@ -53,6 +53,7 @@
     {% set files = detail.result.files if detail.result and detail.result.files else [] %}
     {% for file in files %}
     {% if file.url is playable %}
+    {% if file.mime.startswith('image') %}<a href="{{ file.url }}"><img class="shot" src="{{ file.url }}" alt="{{ file.name }}"></a>{% endif %}
     <div class="res">
       {% if file.mime.startswith('audio') %}
       <button class="play" type="button" aria-label="play" data-src="{{ file.url }}">▶</button>
