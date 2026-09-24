@@ -114,8 +114,9 @@ async def test_ytdl_prober_runs_at_most_four_probes_at_once() -> None:
     assert peak == 4
 
 
-def test_image_quote_is_flat() -> None:
+def test_image_quote_doubles_for_large() -> None:
     assert ImageParams(prompt="a cat").quote(None) == 40
+    assert ImageParams(prompt="a cat", size="large").quote(None) == 80
 
 
 def test_image_reference_is_optional_and_uploadable() -> None:

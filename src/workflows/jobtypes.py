@@ -231,6 +231,11 @@ class ImageParams(JobParams):
     shape: Literal["square", "portrait", "landscape"] = Field(
         "square", title="Shape", description="Shape of the image."
     )
+    size: Literal["normal", "large"] = Field(
+        "normal",
+        title="Size",
+        description="normal is about 1 megapixel; large is about 2.3 and costs double.",
+    )
 
     @model_validator(mode="after")
     def reference_needs_flux_klein(self) -> ImageParams:
@@ -239,7 +244,7 @@ class ImageParams(JobParams):
         return self
 
     def quote(self, probe: Probe | None) -> int:
-        return 40
+        return 80 if self.size == "large" else 40
 
 
 @dataclass(frozen=True)
@@ -334,7 +339,7 @@ JOB_TYPES = (
         name="image",
         title="Image",
         description="Create an image from a description.",
-        pricing="40 credits per image",
+        pricing="40 credits per image, 80 for large",
         params_model=ImageParams,
         steps=_steps(("generate", 85), ("store", 15)),
         webhook="workflows-image",
