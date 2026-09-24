@@ -43,6 +43,8 @@ WEBHOOK: JsonObject = {
     "message_prefix": "al: ",
 }
 FILE_URLS = ["https://bucket.example/a.mp3", "https://bucket.example/a.json"]
+PLAYER_URL = "https://player.example/?a"
+RESULT_URLS = [*FILE_URLS, PLAYER_URL]
 
 
 @pytest.fixture
@@ -62,7 +64,10 @@ def hooked_job(session: Session, services: Services, status: JobStatus) -> Job:
     job.webhook = WEBHOOK
     job.status = status
     job.error = "the executor crashed"
-    job.result = {"files": [{"url": url, "name": "a", "mime": "audio/mpeg"} for url in FILE_URLS]}
+    job.result = {
+        "files": [{"url": url, "name": "a", "mime": "audio/mpeg"} for url in FILE_URLS],
+        "links": [{"label": "open", "url": PLAYER_URL}],
+    }
     session.commit()
     return job
 
@@ -108,7 +113,7 @@ def test_submit_job_rejects_invalid_webhooks(client: TestClient, webhook: JsonOb
     ("status", "text", "result_urls"),
     [
         (JobStatus.RUNNING, "started: {run_url}", []),
-        (JobStatus.SUCCEEDED, "is done: " + " ".join(FILE_URLS), FILE_URLS),
+        (JobStatus.SUCCEEDED, "is done: " + " ".join(RESULT_URLS), RESULT_URLS),
         (JobStatus.FAILED, "failed: the executor crashed ({run_url})", []),
         (JobStatus.CANCELLED, "was cancelled", []),
     ],

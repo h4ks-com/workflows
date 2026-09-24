@@ -85,6 +85,7 @@ class ResultEvent(BaseModel):
 class StoredResult(BaseModel):
     files: list[ResultFile] = Field(description="Files the job produced.")
     metadata_url: str | None = Field(None, description="URL of the metadata JSON.")
+    links: list[ResultLink] = Field(default_factory=list, description="Pages that open it.")
 
     def urls(self) -> list[str]:
         metadata_urls = [self.metadata_url] if self.metadata_url else []

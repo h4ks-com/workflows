@@ -130,7 +130,8 @@ def describe(job: Job, status: JobStatus, run_url: str, result_urls: list[str]) 
 def result_urls(job: Job, status: JobStatus) -> list[str]:
     if status != JobStatus.SUCCEEDED or job.result is None:
         return []
-    return [file.url for file in StoredResult.model_validate(job.result).files]
+    stored = StoredResult.model_validate(job.result)
+    return [file.url for file in stored.files] + [link.url for link in stored.links]
 
 
 class WebhookNotifier:
