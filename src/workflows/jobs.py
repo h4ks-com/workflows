@@ -1,11 +1,12 @@
 import hashlib
 import hmac
+import re
 import secrets
 from collections.abc import Mapping
 from datetime import timedelta
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -31,34 +32,52 @@ class InvalidEventError(Exception):
 type EventKind = Literal["step", "log", "result", "error"]
 
 
+CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]+")
+
+
+def one_line(text: str) -> str:
+    # Executor text reaches chat clients, where a raw newline would start a new protocol command.
+    return " ".join(CONTROL_CHARS.sub(" ", text).split())
+
+
+OneLine = Annotated[str, AfterValidator(one_line)]
+
+
+HttpLink = Annotated[str, Field(max_length=2000, pattern=r"^https?://\S+$")]
+
+
 class StepEvent(BaseModel):
     kind: Literal["step"] = Field(description="Reports the step the executor is on.")
-    step: str = Field(description="Name of the step the executor is working on.")
+    step: OneLine = Field(
+        max_length=100, description="Name of the step the executor is working on."
+    )
     done: int | None = Field(None, ge=0, description="Units finished within the step.")
     total: int | None = Field(None, ge=1, description="Units in the step.")
 
 
 class LogEvent(BaseModel):
     kind: Literal["log"] = Field(description="Adds a line to the run log.")
-    message: str = Field(description="Log line to show on the run page.")
+    message: OneLine = Field(max_length=500, description="Log line to show on the run page.")
 
 
 class ResultFile(BaseModel):
-    url: str = Field(description="Permanent bucket URL of the file.")
-    name: str = Field(description="File name.")
-    mime: str = Field(description="MIME type of the file.")
+    url: HttpLink = Field(description="Permanent bucket URL of the file.")
+    name: OneLine = Field(max_length=200, description="File name.")
+    mime: OneLine = Field(max_length=100, description="MIME type of the file.")
 
 
 class ResultEvent(BaseModel):
     kind: Literal["result"] = Field(description="Finishes the job successfully.")
-    files: list[ResultFile] = Field(description="Files the job produced.")
-    title: str | None = Field(None, description="Title of the result.")
-    metadata_url: str | None = Field(None, description="URL of the metadata JSON beside the files.")
+    files: list[ResultFile] = Field(max_length=20, description="Files the job produced.")
+    title: OneLine | None = Field(None, max_length=200, description="Title of the result.")
+    metadata_url: HttpLink | None = Field(
+        None, description="URL of the metadata JSON beside the files."
+    )
 
 
 class ErrorEvent(BaseModel):
     kind: Literal["error"] = Field(description="Fails the job and refunds it.")
-    message: str = Field(description="Why the job failed.")
+    message: OneLine = Field(max_length=500, description="Why the job failed.")
 
 
 ExecutorEvent = Annotated[

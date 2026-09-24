@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from workflows.bus import QUEUE_TOPIC, EventBus
 from workflows.db import Job, JobStatus, JsonObject, Subscription
-from workflows.jobs import STATUS_EVENT, ResultFile, job_type_for
+from workflows.jobs import STATUS_EVENT, ResultFile, job_type_for, one_line
 from workflows.jobtypes import JobType
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,8 @@ class Delivery:
 
 
 def build_delivery(label: str, hook: Webhook, message: str, details: JsonObject) -> Delivery:
-    payload: JsonObject = {**hook.extra_params, "message": hook.message_prefix + message, **details}
+    text = one_line(hook.message_prefix + message)
+    payload: JsonObject = {**hook.extra_params, "message": text, **details}
     return Delivery(label, str(hook.url), hook.token, payload)
 
 

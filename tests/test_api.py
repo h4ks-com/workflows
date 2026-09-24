@@ -414,3 +414,34 @@ def test_every_api_model_field_is_described(app: FastAPI) -> None:
     assert undescribed == []
     assert schemas["JobView"]["properties"]["status"]["$ref"].endswith("/JobStatus")
     assert schemas["JobEventView"]["properties"]["kind"]["$ref"].endswith("/EventKind")
+
+
+def test_executor_text_is_flattened_to_one_line(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    job = queue_job(session, services, make_user(session, "alice"))
+    headers = {"Authorization": f"Bearer {start_job(session, job)}"}
+    url = f"/api/jobs/{job.id}/events"
+
+    error = {"kind": "error", "message": "boom\r\nPRIVMSG #lobby :pwned\x07"}
+    assert client.post(url, json=error, headers=headers).status_code == 204
+
+    assert client.get(url.removesuffix("/events")).json()["error"] == "boom PRIVMSG #lobby :pwned"
+
+
+@pytest.mark.parametrize(
+    "event",
+    [
+        {"kind": "result", "title": "x" * 201, "files": []},
+        {"kind": "result", "files": [{"url": "javascript:alert(1)", "name": "x", "mime": "a/b"}]},
+        {"kind": "result", "files": [{"url": "https://s3/x", "name": "x", "mime": "a/b"}] * 21},
+        {"kind": "error", "message": "x" * 501},
+    ],
+)
+def test_executor_events_reject_oversized_or_unsafe_values(
+    client: TestClient, session: Session, services: Services, event: JsonObject
+) -> None:
+    job = queue_job(session, services, make_user(session, "alice"))
+    headers = {"Authorization": f"Bearer {start_job(session, job)}"}
+
+    assert client.post(f"/api/jobs/{job.id}/events", json=event, headers=headers).status_code == 422

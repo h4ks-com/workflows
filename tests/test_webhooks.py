@@ -17,7 +17,7 @@ from workflows.bus import QUEUE_TOPIC, BusEvent
 from workflows.db import Job, JobStatus, JsonObject, Subscription, utcnow
 from workflows.jobs import announce
 from workflows.state import Services
-from workflows.webhooks import WebhookNotifier
+from workflows.webhooks import Webhook, WebhookNotifier, build_delivery
 
 HOOK_URL = "https://client.example/hook"
 HOOK_TOKEN = "hook-secret"
@@ -394,3 +394,9 @@ async def test_notify_skips_subscriptions_for_jobs_never_paid(
     await notifier.notify(job.id, JobStatus.CANCELLED)
 
     assert not route.called
+
+
+def test_build_delivery_keeps_the_message_on_one_line() -> None:
+    hook = Webhook.model_validate({"url": HOOK_URL, "token": HOOK_TOKEN, "message_prefix": "hi:\n"})
+    delivery = build_delivery("x", hook, "failed:\r\nQUIT", {})
+    assert delivery.payload["message"] == "hi: failed: QUIT"
