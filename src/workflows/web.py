@@ -1,4 +1,7 @@
-from fastapi import APIRouter, HTTPException, status
+from dataclasses import replace
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -85,10 +88,18 @@ async def partial_queue(page: PageCtx) -> Response:
     return render(page, "_queue_panel.html", _queue_context(page.session, page.services))
 
 
-def _order_context(page: Page, job_type: JobType, error: str | None = None) -> Context:
+def _order_context(
+    page: Page, job_type: JobType, error: str | None = None, prefill: JsonObject | None = None
+) -> Context:
+    fields = field_specs(job_type.params_model.model_json_schema())
+    if prefill:
+        fields = [
+            replace(spec, default=prefill[spec.name]) if spec.name in prefill else spec
+            for spec in fields
+        ]
     return {
         "job_type": type_view(job_type),
-        "fields": field_specs(job_type.params_model.model_json_schema()),
+        "fields": fields,
         "quote": None,
         "error": error,
         "csrf_token": csrf_token(page.request),
@@ -96,9 +107,13 @@ def _order_context(page: Page, job_type: JobType, error: str | None = None) -> C
 
 
 @router.get("/order/{type_name}")
-async def order_page(type_name: str, page: PageCtx) -> Response:
+async def order_page(
+    type_name: str, page: PageCtx, from_job: Annotated[int | None, Query(alias="from")] = None
+) -> Response:
     job_type = get_job_type(page.services, type_name)
-    return render(page, "order.html", _order_context(page, job_type))
+    source = page.session.get(Job, from_job) if from_job is not None else None
+    prefill = source.params if source is not None and source.type == type_name else None
+    return render(page, "order.html", _order_context(page, job_type, prefill=prefill))
 
 
 async def _price_form(page: Page, job_type: JobType, form: FormData) -> Context:

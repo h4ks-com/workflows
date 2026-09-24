@@ -451,3 +451,32 @@ def test_results_play_audio_and_link_other_files(
     assert 'href="https://bucket.example/clip.mp4"' in panel
     assert 'data-src="https://bucket.example/clip.mp4"' not in home
     assert 'href="https://bucket.example/clip.mp4"' in home
+
+
+def test_order_page_prefills_from_an_earlier_job(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    job = make_job(session, services, None)
+
+    response = client.get(f"/order/song?from={job.id}")
+
+    assert response.status_code == 200
+    assert "a song about cats</textarea>" in response.text
+
+
+def test_order_page_ignores_a_job_of_another_type(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    job = make_job(session, services, None)
+
+    response = client.get(f"/order/parody?from={job.id}")
+
+    assert "a song about cats" not in response.text
+
+
+def test_job_page_offers_to_run_it_again(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    job = make_job(session, services, None)
+
+    assert f"/order/song?from={job.id}" in client.get(f"/jobs/{job.id}").text
