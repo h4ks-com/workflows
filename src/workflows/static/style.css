@@ -117,6 +117,10 @@ a.q:hover { background: var(--panel-2); }
 
 .form-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 22px; align-items: start; }
 .field { display: grid; gap: 6px; }
+.panel form:not(.row):not(.form-grid) { display: grid; gap: 12px; }
+.panel form > .btn { justify-self: start; }
+.panel form + .label { margin-top: 10px; }
+.panel > p { margin: 0; }
 .field label { font: 500 12px var(--mono); color: var(--mid); }
 .field small { color: var(--dim); font-size: 12px; }
 input, select, textarea { font: 14px var(--sans); color: var(--text); background: var(--bg); border: 1px solid var(--border); padding: 10px 12px; width: 100%; }
@@ -174,14 +178,15 @@ td.plus { color: var(--ok); } td.minus { color: var(--accent-2); }
   .quote { position: static; }
   .topup { grid-template-columns: repeat(2, 1fr); }
 }
+@media (max-width: 860px) {
+  header.bar { gap: 8px; padding-block: 12px; }
+  header.bar nav.tabs { order: 10; width: 100%; }
+  header.bar nav.tabs a { flex: 1; text-align: center; }
+}
 @media (max-width: 640px) {
   body { padding-inline: 12px; }
   .wrap, .page { gap: 16px; }
-  header.bar { gap: 10px; padding-block: 12px; }
-  header.bar nav.tabs { order: 10; width: 100%; }
-  header.bar nav.tabs a { flex: 1; text-align: center; }
   .who, .chip .free { display: none; }
-  header.bar { gap: 8px; }
   header.bar .btn, .chip { padding: 6px 9px; font-size: 12px; }
   .brand { font-size: 16px; }
   input, select, textarea { font-size: 16px; }

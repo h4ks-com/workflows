@@ -30,9 +30,9 @@
     <span class="label">grant credits</span>
     <form method="post" action="/admin/credits">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <div class="field"><input type="text" name="username" placeholder="username" required></div>
-      <div class="field"><input type="number" name="credits" placeholder="credit delta, negative to deduct" required></div>
-      <div class="field"><input type="text" name="note" placeholder="why" required></div>
+      <div class="field"><label for="grant-user">username</label><input id="grant-user" type="text" name="username" required></div>
+      <div class="field"><label for="grant-credits">credits</label><input id="grant-credits" type="number" name="credits" required><small>use a negative number to take credits away</small></div>
+      <div class="field"><label for="grant-note">reason</label><input id="grant-note" type="text" name="note" required></div>
       <button class="btn" type="submit">grant</button>
     </form>
   </div>
