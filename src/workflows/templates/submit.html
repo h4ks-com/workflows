@@ -11,7 +11,7 @@
 {% if not me %}<div class="notice">log in to submit this job. <a href="/login?next=/submit/{{ job_type.name }}">log in</a></div>{% endif %}
 <form method="post" action="/submit/{{ job_type.name }}" class="form-grid" id="submit-form"
   hx-post="/submit/{{ job_type.name }}/quote" hx-trigger="input changed delay:400ms, change"
-  hx-target="#quote-panel" hx-swap="innerHTML">
+  hx-target="#quote-body" hx-swap="innerHTML">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <div class="panel">
   {% for f in fields %}
@@ -40,8 +40,11 @@
   </div>
   {% endfor %}
 </div>
-<aside class="panel quote" id="quote-panel" aria-label="cost">
-  {% include "_quote_panel.html" %}
+<aside class="panel quote" aria-label="cost">
+  <span class="label">cost</span>
+  <div id="quote-body">{% include "_quote_panel.html" %}</div>
+  <button type="submit" class="btn">submit</button>
+  <small class="muted">you get a full refund if it fails.</small>
 </aside>
 </form>
 {% endif %}
