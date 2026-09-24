@@ -26,6 +26,7 @@ from workflows.login import router as login_router
 from workflows.mcp import build_mcp
 from workflows.n8n import N8nProvider
 from workflows.probe import PROBE_LIMITS, ProbeError, Prober, YtdlProber
+from workflows.services import ServiceProvider
 from workflows.settings import Settings, load_settings
 from workflows.state import AppServices, Services
 from workflows.storage import build_storage
@@ -127,9 +128,13 @@ def _register_routers(app: FastAPI) -> None:
 
 
 def default_providers(settings: Settings, http: httpx.AsyncClient) -> list[Provider]:
+    services: list[Provider] = [
+        ServiceProvider(http, url, settings.executor_token) for url in settings.workflow_services
+    ]
     if settings.n8n_url and settings.n8n_api_key:
-        return [N8nProvider(http, settings.n8n_url, settings.n8n_api_key, settings.executor_token)]
-    return [builtin_provider(http, settings.n8n_url, settings.executor_token)]
+        n8n = N8nProvider(http, settings.n8n_url, settings.n8n_api_key, settings.executor_token)
+        return [n8n, *services]
+    return [builtin_provider(http, settings.n8n_url, settings.executor_token), *services]
 
 
 def _install_middleware(app: FastAPI, settings: Settings) -> None:

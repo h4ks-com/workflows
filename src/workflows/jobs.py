@@ -65,12 +65,20 @@ class ResultFile(BaseModel):
     mime: OneLine = Field(max_length=100, description="MIME type of the file.")
 
 
+class ResultLink(BaseModel):
+    label: OneLine = Field(max_length=60, description="What the link opens.")
+    url: HttpLink = Field(description="Where the result opens, for example a player.")
+
+
 class ResultEvent(BaseModel):
     kind: Literal["result"] = Field(description="Finishes the job successfully.")
     files: list[ResultFile] = Field(max_length=20, description="Files the job produced.")
     title: OneLine | None = Field(None, max_length=200, description="Title of the result.")
     metadata_url: HttpLink | None = Field(
         None, description="URL of the metadata JSON beside the files."
+    )
+    links: list[ResultLink] = Field(
+        default_factory=list, max_length=5, description="Pages that open the result."
     )
 
 

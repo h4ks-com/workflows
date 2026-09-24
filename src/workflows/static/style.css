@@ -111,6 +111,7 @@ a.q:hover { background: var(--panel-2); }
 .feed { display: grid; gap: 10px; }
 .res { display: grid; grid-template-columns: 40px 1fr; gap: 12px; align-items: center; background: var(--panel); border: 1px solid var(--border); padding: 12px; }
 .play { width: 40px; height: 40px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font: 16px var(--mono); cursor: pointer; }
+a.play { display: grid; place-items: center; text-decoration: none; }
 .res .meta { display: grid; gap: 6px; min-width: 0; }
 .res > .meta:first-child { grid-column: 1 / -1; }
 .shot { display: block; max-width: 100%; border: 1px solid var(--border); }

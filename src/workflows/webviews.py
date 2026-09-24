@@ -145,6 +145,10 @@ def is_playable_url(url: str) -> bool:
     return url.startswith(("http://", "https://"))
 
 
+def is_listenable(mime: str) -> bool:
+    return mime.startswith("audio/") and mime != "audio/midi"
+
+
 STATUS_LABELS = {
     JobStatus.AWAITING_CONFIRMATION: "waiting for confirmation",
     JobStatus.QUEUED: "in line",
@@ -199,6 +203,7 @@ def credits(amount: int) -> str:
 
 
 templates.env.tests["playable"] = is_playable_url
+templates.env.tests["listenable"] = is_listenable
 templates.env.filters["credits"] = credits
 templates.env.filters["status_label"] = status_label
 templates.env.filters["ledger_label"] = ledger_label

@@ -474,6 +474,28 @@ def test_results_play_audio_and_link_other_files(
     assert 'href="https://bucket.example/clip.mp4"' in home
 
 
+def test_a_midi_result_opens_its_player_link(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    job = queue_job(session, services, make_user(session, "alice"))
+    start(job)
+    midi: JsonObject = {
+        "url": "https://bucket.example/a.mid",
+        "name": "a.mid",
+        "mime": "audio/midi",
+    }
+    player: JsonObject = {"label": "open in kinesthesia", "url": "https://player.example/?a"}
+    succeed(session, job, {"files": [midi], "links": [player]})
+    session.commit()
+
+    panel = client.get(f"/partials/jobs/{job.id}").text
+    home = client.get("/").text
+
+    assert 'data-src="https://bucket.example/a.mid"' not in panel + home
+    assert ">open in kinesthesia</a>" in panel
+    assert 'href="https://player.example/?a"' in home
+
+
 def test_submit_page_prefills_from_an_earlier_job(
     client: TestClient, session: Session, services: Services
 ) -> None:

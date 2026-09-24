@@ -21,6 +21,7 @@ class Settings:
     admin_users: frozenset[str] = frozenset()
     n8n_url: str = ""
     n8n_api_key: str = ""
+    workflow_services: tuple[str, ...] = ()
     executor_token: str = ""
     executor_timeout_factor: float = DEFAULT_EXECUTOR_TIMEOUT_FACTOR
     first_event_timeout_seconds: int = DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS
@@ -38,8 +39,10 @@ class Settings:
     minio_use_ssl: bool = True
 
     def __post_init__(self) -> None:
-        if self.n8n_url and not self.executor_token:
-            raise ValueError("WORKFLOWS_EXECUTOR_TOKEN is required when N8N_URL is set")
+        if (self.n8n_url or self.workflow_services) and not self.executor_token:
+            raise ValueError(
+                "WORKFLOWS_EXECUTOR_TOKEN is required when N8N_URL or WORKFLOW_SERVICES is set"
+            )
         if self.dev_login and self.base_url.startswith("https://"):
             raise ValueError("DEV_LOGIN cannot be enabled when BASE_URL is https")
 
@@ -57,6 +60,11 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
         admin_users=_username_list(environ.get("WORKFLOWS_ADMIN_USERS", "")),
         n8n_url=environ.get("N8N_URL", "").rstrip("/"),
         n8n_api_key=environ.get("N8N_API_KEY", ""),
+        workflow_services=tuple(
+            url.strip().rstrip("/")
+            for url in environ.get("WORKFLOW_SERVICES", "").split(",")
+            if url.strip()
+        ),
         executor_token=environ.get("WORKFLOWS_EXECUTOR_TOKEN", ""),
         executor_timeout_factor=float(
             environ.get("EXECUTOR_TIMEOUT_FACTOR", DEFAULT_EXECUTOR_TIMEOUT_FACTOR)
