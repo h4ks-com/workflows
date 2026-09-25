@@ -21,6 +21,7 @@ from workflows.accounts.account import topup_url
 from workflows.accounts.account import unlink_identity
 from workflows.accounts.auth import csrf_token
 from workflows.accounts.auth import require_admin
+from workflows.accounts.beans import PayoutError
 from workflows.accounts.ledger import InsufficientCreditsError
 from workflows.api.admin import AdjustCreditsRequest
 from workflows.api.admin import adjust_credits
@@ -306,7 +307,9 @@ async def _admin_redirect(page: Page) -> RedirectResponse | None:
     return None
 
 
-def _render_admin(page: Page, error: str | None = None, status_code: int = 200) -> Response:
+def _render_admin(
+    page: Page, error: str | None = None, status_code: int = 200, notice: str | None = None
+) -> Response:
     queue = queue_view(page.session, page.services)
     reserved = {queue.running.id} if queue.running else set()
     reserved |= {slot.id for slot in queue.queued}
@@ -322,6 +325,10 @@ def _render_admin(page: Page, error: str | None = None, status_code: int = 200) 
         "csrf_token": csrf_token(page.request),
         "active": "admin",
         "error": error,
+        "notice": notice,
+        "payout_recipient": page.services.beans_payout.recipient
+        if page.services.beans_payout
+        else None,
     }
     return render(page, "admin.html", context, status_code)
 
@@ -348,6 +355,22 @@ async def _toggle_pause(page: Page, paused: bool) -> Response:
     await verified_form(page.request)
     set_paused(page.services, paused)
     return RedirectResponse("/admin", status_code=303)
+
+
+@router.post("/admin/beans/payout")
+async def admin_beans_payout(page: PageCtx) -> Response:
+    redirect = await _admin_redirect(page)
+    if redirect:
+        return redirect
+    await verified_form(page.request)
+    payout = page.services.beans_payout
+    if payout is None:
+        return _render_admin(page, "no beans payout account is configured", 409)
+    try:
+        sent = await payout.send_all()
+    except PayoutError as error:
+        return _render_admin(page, str(error), 502)
+    return _render_admin(page, notice=f"sent {sent} beans to {payout.recipient}.")
 
 
 @router.post("/admin/cancel")

@@ -33,6 +33,7 @@ class Settings:
     logto_app_secret: str = ""
     beans_url: str = ""
     beans_token: str = ""
+    beans_payout_user: str = ""
     dev_login: bool = False
     minio_endpoint: str = ""
     minio_access_key: str = ""
@@ -86,6 +87,7 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
         logto_app_secret=environ.get("LOGTO_APP_SECRET", ""),
         beans_url=environ.get("BEANS_URL", "").rstrip("/"),
         beans_token=environ.get("BEANS_TOKEN", ""),
+        beans_payout_user=environ.get("BEANS_PAYOUT_USER", ""),
         dev_login=environ.get("DEV_LOGIN", "").strip().lower() == "true",
         minio_endpoint=environ.get("MINIO_ENDPOINT", ""),
         minio_access_key=environ.get("MINIO_ACCESS_KEY", ""),

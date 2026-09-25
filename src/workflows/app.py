@@ -29,6 +29,7 @@ from starlette.types import Send
 
 from workflows.accounts import account
 from workflows.accounts.beans import BeansPoller
+from workflows.accounts.beans import build_payout
 from workflows.accounts.ledger import InsufficientCreditsError
 from workflows.accounts.login import build_oauth
 from workflows.accounts.login import router as login_router
@@ -238,6 +239,7 @@ def create_app(
         http=http,
         oauth=build_oauth(settings),
         beans_poller=beans_poller,
+        beans_payout=build_payout(http, settings),
         storage=build_storage(settings),
     )
     mcp = build_mcp(services)

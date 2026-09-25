@@ -10,6 +10,7 @@ from fastapi import Request
 from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 
+from workflows.accounts.beans import BeansPayout
 from workflows.accounts.beans import BeansPoller
 from workflows.jobtypes.catalog import Catalog
 from workflows.jobtypes.probe import Prober
@@ -30,6 +31,7 @@ class Services:
     http: httpx.AsyncClient
     oauth: OAuth | None
     beans_poller: BeansPoller | None
+    beans_payout: BeansPayout | None
     storage: Storage | None
 
 

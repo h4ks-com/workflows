@@ -1,13 +1,16 @@
 import asyncio
+import json
 from dataclasses import replace
 
 import httpx
 import pytest
+import respx
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from conftest import BEANS_URL
 from conftest import EXECUTOR_TOKEN
 from conftest import MINIO_ENDPOINT
 from conftest import N8N_URL
@@ -18,6 +21,7 @@ from conftest import make_job
 from conftest import make_user
 from conftest import queue_job
 from conftest import with_storage
+from workflows.accounts.beans import BeansPayout
 from workflows.app import create_app
 from workflows.db import ExternalIdentity
 from workflows.db import JsonObject
@@ -335,6 +339,45 @@ def test_admin_pause_and_resume(client: TestClient, session: Session, services: 
     page = client.get("/admin")
     client.post("/admin/resume", data={"csrf_token": csrf_from(page.text)}, follow_redirects=False)
     assert services.worker.paused is False
+
+
+def with_payout(app: FastAPI, services: Services) -> None:
+    settings = replace(services.settings, beans_token="beans-token", beans_payout_user="mattf")
+    app.state.services = replace(services, beans_payout=BeansPayout(services.http, settings))
+
+
+@respx.mock
+def test_admin_sends_all_beans_to_the_payout_account(
+    app: FastAPI, client: TestClient, session: Session, services: Services
+) -> None:
+    with_payout(app, services)
+    respx.get(f"{BEANS_URL}/api/v1/wallet").respond(
+        json={"username": "workflows", "bean_amount": 42}
+    )
+    transfer = respx.post(f"{BEANS_URL}/api/v1/transfer").respond(json={"message": "ok"})
+    log_in(client, make_user(session, "root"))
+    page = client.get("/admin")
+    assert "send all beans to mattf" in page.text
+
+    response = client.post("/admin/beans/payout", data={"csrf_token": csrf_from(page.text)})
+
+    assert "sent 42 beans to mattf." in response.text
+    assert json.loads(transfer.calls.last.request.content)["to_user"] == "mattf"
+
+
+@respx.mock
+def test_only_admins_can_send_the_beans(
+    app: FastAPI, client: TestClient, session: Session, services: Services
+) -> None:
+    with_payout(app, services)
+    transfer = respx.post(f"{BEANS_URL}/api/v1/transfer")
+    log_in(client, make_user(session, "alice"))
+    page = client.get("/submit/song")
+
+    response = client.post("/admin/beans/payout", data={"csrf_token": csrf_from(page.text)})
+
+    assert response.status_code == 403
+    assert not transfer.called
 
 
 def test_admin_cancel_refunds_job(client: TestClient, session: Session, services: Services) -> None:

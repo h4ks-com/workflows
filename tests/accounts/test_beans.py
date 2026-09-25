@@ -1,4 +1,5 @@
 import asyncio
+import json
 from unittest.mock import AsyncMock
 
 import httpx
@@ -8,7 +9,10 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from conftest import make_user
+from workflows.accounts.beans import BeansPayout
 from workflows.accounts.beans import BeansPoller
+from workflows.accounts.beans import PayoutError
+from workflows.accounts.beans import build_payout
 from workflows.settings import Settings
 from workflows.state import Services
 
@@ -106,3 +110,59 @@ async def test_run_survives_database_errors(
         await poller.run()
 
     assert tick.await_count == 2
+
+
+WALLET_URL = "https://beans.example/api/v1/wallet"
+TRANSFER_URL = "https://beans.example/api/v1/transfer"
+
+
+def payout_settings(services: Services, payout_user: str = "mattf") -> Settings:
+    return Settings(
+        session_secret=services.settings.session_secret,
+        database_url=services.settings.database_url,
+        base_url=services.settings.base_url,
+        beans_url=services.settings.beans_url,
+        beans_token="beans-token",
+        beans_payout_user=payout_user,
+    )
+
+
+@respx.mock
+async def test_payout_sends_the_whole_wallet_to_the_payout_account(services: Services) -> None:
+    respx.get(WALLET_URL).respond(json={"username": "workflows", "bean_amount": 42})
+    transfer = respx.post(TRANSFER_URL).respond(json={"message": "transfer successful"})
+    payout = build_payout(services.http, payout_settings(services))
+    assert payout is not None
+
+    assert await payout.send_all() == 42
+
+    request = transfer.calls.last.request
+    assert json.loads(request.content) == {"to_user": "mattf", "amount": 42, "force": False}
+    assert request.headers["Authorization"] == "Bearer beans-token"
+
+
+@respx.mock
+async def test_payout_of_an_empty_wallet_sends_nothing(services: Services) -> None:
+    respx.get(WALLET_URL).respond(json={"username": "workflows", "bean_amount": 0})
+    transfer = respx.post(TRANSFER_URL)
+    payout = BeansPayout(services.http, payout_settings(services))
+
+    with pytest.raises(PayoutError, match="empty"):
+        await payout.send_all()
+    assert not transfer.called
+
+
+@respx.mock
+async def test_payout_reports_why_beans_refused(services: Services) -> None:
+    respx.get(WALLET_URL).respond(json={"username": "workflows", "bean_amount": 5})
+    respx.post(TRANSFER_URL).respond(
+        400, json={"error": "recipient not found, use force=true to create wallet"}
+    )
+    payout = BeansPayout(services.http, payout_settings(services))
+
+    with pytest.raises(PayoutError, match="recipient not found"):
+        await payout.send_all()
+
+
+def test_payout_is_off_without_a_payout_account(services: Services) -> None:
+    assert build_payout(services.http, payout_settings(services, payout_user="")) is None

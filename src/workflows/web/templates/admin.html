@@ -34,6 +34,7 @@
 <section class="page">
 <h1>admin</h1>
 {% if error %}<div class="notice warn">{{ error }}</div>{% endif %}
+{% if notice %}<div class="notice">{{ notice }}</div>{% endif %}
 
 <div class="grid-2">
   <div class="panel">
@@ -61,6 +62,16 @@
     {% endif %}
   </div>
 </div>
+
+{% if payout_recipient %}
+<div class="panel">
+  <span class="label">beans</span>
+  <form method="post" action="/admin/beans/payout" data-confirm="send every bean in the workflows wallet to {{ payout_recipient }}?">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn" type="submit">send all beans to {{ payout_recipient }}</button>
+  </form>
+</div>
+{% endif %}
 
 <div class="panel">
   <span class="label">credits</span>

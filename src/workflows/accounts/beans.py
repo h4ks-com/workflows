@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 POLL_SECONDS = 30.0
 FETCH_TIMEOUT_SECONDS = 15.0
 TRANSACTIONS_PATH = "/api/v1/transactions"
+WALLET_PATH = "/api/v1/wallet"
+TRANSFER_PATH = "/api/v1/transfer"
 WORKFLOWS_WALLET = "workflows"
 
 
@@ -94,3 +96,75 @@ class BeansPoller:
         user = session.scalar(select(User).where(User.username == transaction.from_user))
         if user is not None:
             topup(session, user, transaction.amount, str(transaction.id))
+
+
+class PayoutError(Exception):
+    pass
+
+
+class BeansWallet(BaseModel):
+    bean_amount: StrictInt = Field(ge=0)
+
+
+class BeansPayout:
+    """Sends the whole workflows wallet to the one payout account in the settings."""
+
+    def __init__(self, http: httpx.AsyncClient, settings: Settings) -> None:
+        self._http = http
+        self._settings = settings
+        self._sending = asyncio.Lock()
+
+    @property
+    def recipient(self) -> str:
+        return self._settings.beans_payout_user
+
+    async def send_all(self) -> int:
+        """Send every bean in the workflows wallet to the payout account.
+
+        :return: how many beans were sent.
+        :raises PayoutError: when the wallet is empty or Beans refuses.
+        """
+        async with self._sending:
+            balance = await self._balance()
+            if balance == 0:
+                raise PayoutError("the workflows wallet is empty")
+            await self._transfer(balance)
+        logger.warning("sent %d beans from the workflows wallet to %s", balance, self.recipient)
+        return balance
+
+    def _headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self._settings.beans_token}"}
+
+    async def _balance(self) -> int:
+        try:
+            response = await self._http.get(
+                f"{self._settings.beans_url}{WALLET_PATH}",
+                headers=self._headers(),
+                timeout=FETCH_TIMEOUT_SECONDS,
+            )
+            response.raise_for_status()
+            return BeansWallet.model_validate_json(response.content).bean_amount
+        except (httpx.HTTPError, ValidationError) as error:
+            raise PayoutError(f"could not read the workflows wallet: {error}") from error
+
+    async def _transfer(self, amount: int) -> None:
+        # We never let Beans create a wallet, so a misspelt payout account fails the transfer.
+        body = {"to_user": self.recipient, "amount": amount, "force": False}
+        try:
+            response = await self._http.post(
+                f"{self._settings.beans_url}{TRANSFER_PATH}",
+                json=body,
+                headers=self._headers(),
+                timeout=FETCH_TIMEOUT_SECONDS,
+            )
+        except httpx.HTTPError as error:
+            raise PayoutError(f"could not reach Beans: {error}") from error
+        if response.is_error:
+            raise PayoutError(f"Beans refused the transfer: {response.text[:200]}")
+
+
+def build_payout(http: httpx.AsyncClient, settings: Settings) -> BeansPayout | None:
+    """Offer the payout only when Beans and a payout account are configured."""
+    if not (settings.beans_url and settings.beans_token and settings.beans_payout_user):
+        return None
+    return BeansPayout(http, settings)
