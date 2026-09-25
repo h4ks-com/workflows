@@ -208,8 +208,10 @@ td.plus { color: var(--ok); } td.minus { color: var(--accent-2); }
   .panel, .stat, .type { padding: 14px; }
   .btn { justify-content: center; }
   .quote .btn, .panel form > .btn { width: 100%; }
-  .tl { grid-template-columns: 26px 1fr; }
-  .tl .when { grid-column: 2; text-align: left; }
+  table.stack thead { display: none; }
+  table.stack tr { display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  table.stack td { padding: 0; border: 0; }
+  table.stack td:last-child { grid-column: 1 / -1; }
   .quote .big { font-size: 28px; }
 }
 @media (max-width: 520px) {
