@@ -9,7 +9,7 @@ Import `executor-template.json` into n8n. It is a working executor that greets a
 ## What the workflow needs
 
 1. **The `h4ks-workflows` tag**, and the workflow is published. Remove the tag or unpublish it to take the job off the site.
-2. **An enabled Webhook trigger** with method `POST`, header auth on `X-API-Key` with the service's executor token, and "respond immediately". Its path is where the service sends each job, so keep it unique, for example `workflows-image`.
+2. **An enabled Webhook trigger** with method `POST`, header auth on `X-API-Key` with the service's executor token, and "respond immediately". Its path is where the service sends each job, and without its `workflows-` prefix it is the job type's name in URLs and the API, so keep it unique, for example `workflows-image` for `image`.
 3. **An enabled Form Trigger** whose title, description and fields are the form users fill in on the site, set to require an n8n login, with its own path (for example `workflows-image-form`, since it cannot share the webhook's). It is a real trigger: people signed in to n8n can run the workflow from it, which runs the same flow without touching anyone's credits.
 4. **Both triggers joined into one flow.** The webhook goes straight into `Read Job`. The form goes through `From Form`, which builds the same `params` the service sends, with a manual-run sink as `callback_url`: a webhook in your n8n that accepts and drops the progress and result calls of manual runs. `Read Job` accepts only your site's callback URLs and that sink. A form with file fields needs a step before `From Form` that stores each upload and puts its public URL in the params.
 5. **Settings in the Job Form's Notes** (node settings, Notes, with "Display note in flow" on): a small JSON object holding what a form cannot, at least the price.
@@ -24,11 +24,11 @@ Every field needs a Field Name, which becomes the param name the executor receiv
 | --- | --- | --- |
 | Text, Email, Date | text input, 200 characters | string |
 | Textarea | text area, 2000 characters | string |
-| Number | number input | integer, or a float with `"type": "number"` |
+| Number | number input | integer, or a float when the default value has a decimal point |
 | Dropdown or Radio | buttons, one choice | one of the options |
 | File | link, upload or drag and drop, with its accepted types | an `https` URL |
 | Checkbox with exactly one option | checkbox; the default is checked when it equals the option | boolean |
-| Custom HTML | help text of the field before it | nothing |
+| Custom HTML | help text of the field before it; after a dropdown, each `<img src="https://..." alt="option">` becomes the picture on that option | nothing |
 | Hidden Field | ignored | nothing |
 
 Required fields are required on the site. A default value pre-fills the field; for a dropdown it must match an option. Multiselect dropdowns, checkboxes with several options and password fields are refused.
@@ -59,9 +59,7 @@ Fuller ones, from the image job:
 - `pricing`: the price explained in words, shown to users. Defaults to the price expression.
 - `steps`: the step names the executor reports, in order, each with a weight for the progress bar. Defaults to one step called `run`.
 - `position`: the order on the site, lowest first. Defaults to 0.
-- `name`: the job type id in URLs and the API, lowercase letters, digits and dashes. Defaults to the webhook path without its `workflows-` prefix.
-- `fields`: per-field settings the n8n form cannot hold: `type`, `minimum`, `maximum`, `min_length`, `max_length`, `show_when`, `previews`, and `description` to override the help text. A field with `show_when` shows only when the other fields hold those values, and the service rejects it otherwise.
-- `previews`: for a dropdown, a picture per option, shown on the option's button so people see what they pick, for example `"look": {"previews": {"neon": "https://media.example.com/previews/karaoke/look-neon.webp"}}`. Keys must be options of the field. Host the pictures in the same public bucket as the results, since the site only loads images from there; an animated WebP shows motion.
+- `fields`: per-field limits the n8n form cannot hold: `minimum`, `maximum`, `min_length`, `max_length` and `show_when`. A field with `show_when` shows only when the other fields hold those values, and the service rejects it otherwise.
 
 ## What the executor does
 

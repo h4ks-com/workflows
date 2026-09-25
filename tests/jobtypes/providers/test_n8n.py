@@ -129,17 +129,44 @@ async def test_a_note_with_only_a_price_uses_defaults() -> None:
     assert image.form.fields[0].name == "prompt"
 
 
+def mood_form(html: str) -> JsonObject:
+    mood: JsonValue = {
+        "fieldType": "dropdown",
+        "fieldName": "mood",
+        "fieldLabel": "Mood",
+        "fieldOptions": {"values": [{"option": "calm"}, {"option": "loud"}]},
+    }
+    return with_form_fields([mood, {"fieldType": "html", "html": html}])
+
+
 @respx.mock
-async def test_option_previews_reach_the_form_and_its_schema() -> None:
-    previews = {"square": "https://media.example/square.webp"}
-    workflow = with_manifest({"fields": {"shape": {"previews": previews}}})
-    respx.get(LIST_URL).respond(json={"data": [workflow], "nextCursor": None})
+async def test_pictures_in_a_fields_html_preview_its_options() -> None:
+    calm = "https://media.example/calm.webp"
+    html = f'<p>How it sounds.</p><img src="{calm}" alt="calm">'
+    respx.get(LIST_URL).respond(json={"data": [mood_form(html)], "nextCursor": None})
 
-    [image] = await provider().discover()
+    [echo] = await provider().discover()
 
-    shape = next(spec for spec in image.form.fields if spec.name == "shape")
-    assert shape.previews == previews
-    assert form_from_schema(image.form.json_schema()).fields[3].previews == previews
+    [mood] = echo.form.fields
+    assert mood.description == "How it sounds."
+    assert mood.previews == {"calm": calm}
+    assert form_from_schema(echo.form.json_schema()).fields[0].previews == {"calm": calm}
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("html", "error"),
+    [
+        ('<img src="https://media.example/q.webp" alt="quiet">', "unknown options ['quiet']"),
+        ('<img src="http://media.example/c.webp" alt="calm">', "not https"),
+    ],
+)
+async def test_bad_option_pictures_skip_the_workflow(html: str, error: str) -> None:
+    respx.get(LIST_URL).respond(json={"data": [mood_form(html)], "nextCursor": None})
+    n8n = provider()
+
+    assert await n8n.discover() == []
+    assert error in n8n.errors[str(IMAGE_WORKFLOW["name"])]
 
 
 @respx.mock
@@ -227,7 +254,8 @@ async def test_discover_reads_the_tagged_workflows_into_job_types() -> None:
 
 @respx.mock
 async def test_discover_follows_the_cursor() -> None:
-    second = copy.deepcopy(with_manifest({"name": "image-two", "position": 9}))
+    second = copy.deepcopy(with_manifest({"position": 9}))
+    node(second, "n8n-nodes-base.webhook")["parameters"]["path"] = "workflows-image-two"
     respx.get(LIST_URL).mock(
         side_effect=[
             httpx.Response(200, json={"data": [IMAGE_WORKFLOW], "nextCursor": "next"}),
@@ -247,8 +275,8 @@ async def test_discover_follows_the_cursor() -> None:
         ({"price": "80 if colour == 'red' else 40"}, "colour"),
         ({"price": "open('x')"}, "only call allowed"),
         ({"price": "[40]"}, "not allowed"),
-        ({"fields": {"nope": {"description": "x"}}}, "nope"),
-        ({"fields": {"shape": {"previews": {"round": "https://x.example/r.png"}}}}, "round"),
+        ({"fields": {"nope": {"max_length": 9}}}, "nope"),
+        ({"name": "image-two"}, "settings are invalid"),
         ({"steps": []}, "settings are invalid"),
         ({"surprise": True}, "settings are invalid"),
     ],

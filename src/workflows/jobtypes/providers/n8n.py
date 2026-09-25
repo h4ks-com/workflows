@@ -1,13 +1,14 @@
 import logging
 import re
+from dataclasses import dataclass
+from dataclasses import field
 from html import unescape
-from typing import Literal
+from html.parser import HTMLParser
 
 import httpx
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
-from pydantic import HttpUrl
 from pydantic import JsonValue
 from pydantic import ValidationError
 
@@ -92,21 +93,17 @@ class FormFields(BaseModel):
 class FieldOverride(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    description: str | None = None
-    type: Literal["integer", "number"] | None = None
     minimum: float | None = None
     maximum: float | None = None
     min_length: int | None = None
     max_length: int | None = None
     show_when: JsonObject | None = None
-    previews: dict[str, HttpUrl] | None = None
 
 
 class Manifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     price: str
-    name: str | None = Field(None, pattern=NAME_PATTERN)
     pricing: str | None = None
     steps: list[tuple[str, int]] = Field(default_factory=lambda: [DEFAULT_STEP], min_length=1)
     position: int = 0
@@ -138,14 +135,14 @@ def _manifest(form_node: N8nNode) -> Manifest:
         raise N8nWorkflowError(f"its settings are invalid: {error}") from error
 
 
-def _kind_and_type(element: FormElement, override: FieldOverride) -> tuple[FieldKind, ValueType]:
+def _kind_and_type(element: FormElement) -> tuple[FieldKind, ValueType]:
     match element.fieldType:
         case "text" | "email" | "date":
             return "text", "string"
         case "textarea":
             return "textarea", "string"
         case "number":
-            return "number", override.type or "integer"
+            return "number", "number" if "." in (element.defaultValue or "") else "integer"
         case "dropdown" | "radio":
             return "select", "string"
         case "file":
@@ -177,49 +174,75 @@ def _lengths(
     return (1 if required else None), (TEXTAREA_LIMIT if kind == "textarea" else TEXT_LIMIT)
 
 
-def _help_texts(elements: list[FormElement]) -> dict[str, str]:
-    help_texts: dict[str, str] = {}
+class _Pictures(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.by_alt: dict[str, str] = {}
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        found = dict(attrs)
+        alt, src = found.get("alt"), found.get("src")
+        if tag == "img" and alt and src:
+            self.by_alt[alt] = src
+
+
+@dataclass(frozen=True)
+class FieldHtml:
+    text: str = ""
+    pictures: dict[str, str] = field(default_factory=dict)
+
+
+def _field_html(html: str) -> FieldHtml:
+    pictures = _Pictures()
+    pictures.feed(html)
+    return FieldHtml(" ".join(unescape(HTML_TAG.sub(" ", html)).split()), pictures.by_alt)
+
+
+def _html_after_fields(elements: list[FormElement]) -> dict[str, FieldHtml]:
+    after: dict[str, FieldHtml] = {}
     previous: str | None = None
     for element in elements:
         if element.fieldType == "html" and previous and element.html:
-            help_texts[previous] = " ".join(unescape(HTML_TAG.sub(" ", element.html)).split())
+            after[previous] = _field_html(element.html)
         elif element.fieldType not in ("html", "hiddenField"):
             previous = element.fieldName
-    return help_texts
+    return after
 
 
-def _description(element: FormElement, override: FieldOverride, help_text: str | None) -> str:
+def _description(element: FormElement, help_text: str) -> str:
     options = element.fieldOptions.values
     single_checkbox = element.fieldType == "checkbox" and len(options) == 1
     option_text = options[0].option if single_checkbox else None
-    return override.description or help_text or element.placeholder or option_text or ""
+    return help_text or element.placeholder or option_text or ""
 
 
 def _previews(
-    element: FormElement, override: FieldOverride, options: tuple[str, ...]
+    element: FormElement, pictures: dict[str, str], options: tuple[str, ...]
 ) -> dict[str, str] | None:
-    if override.previews is None:
+    if not pictures:
         return None
-    unknown = set(override.previews) - set(options)
+    unknown = set(pictures) - set(options)
     if unknown:
         raise N8nWorkflowError(
-            f"the field {element.fieldName} has previews for unknown options {sorted(unknown)}"
+            f"the field {element.fieldName} has pictures for unknown options {sorted(unknown)}"
         )
-    return {option: str(url) for option, url in override.previews.items()}
+    if not all(src.startswith("https://") for src in pictures.values()):
+        raise N8nWorkflowError(f"the field {element.fieldName} has a picture that is not https")
+    return pictures
 
 
-def _field(element: FormElement, override: FieldOverride, help_text: str | None) -> FieldSpec:
+def _field(element: FormElement, override: FieldOverride, html: FieldHtml) -> FieldSpec:
     if not element.fieldName:
         raise N8nWorkflowError(f"the field {element.fieldLabel} has no field name")
     if element.multiselect:
         raise N8nWorkflowError(f"the field {element.fieldName} is a multiselect")
-    kind, value_type = _kind_and_type(element, override)
+    kind, value_type = _kind_and_type(element)
     options = tuple(option.option for option in element.fieldOptions.values)
     min_length, max_length = _lengths(kind, value_type, element.requiredField)
     return FieldSpec(
         name=element.fieldName,
         label=element.fieldLabel or element.fieldName,
-        description=_description(element, override, help_text),
+        description=_description(element, html.text),
         kind=kind,
         required=element.requiredField,
         value_type=value_type,
@@ -231,7 +254,7 @@ def _field(element: FormElement, override: FieldOverride, help_text: str | None)
         default=_default(element, value_type),
         accept=(element.acceptFileTypes or "*/*") if value_type == "url" else None,
         show_when=override.show_when,
-        previews=_previews(element, override, options),
+        previews=_previews(element, html.pictures, options),
     )
 
 
@@ -243,12 +266,12 @@ def _form(name: str, form_node: N8nNode, manifest: Manifest) -> Form:
     shown = [
         element for element in parsed.values if element.fieldType not in ("html", "hiddenField")
     ]
-    help_texts = _help_texts(parsed.values)
+    html_after = _html_after_fields(parsed.values)
     fields = tuple(
         _field(
             element,
             manifest.fields.get(element.fieldName or "", FieldOverride()),
-            help_texts.get(element.fieldName or ""),
+            html_after.get(element.fieldName or "", FieldHtml()),
         )
         for element in shown
     )
@@ -262,7 +285,8 @@ def _name_from_path(path: str) -> str:
     name = path.removeprefix(WEBHOOK_PREFIX)
     if not re.fullmatch(NAME_PATTERN, name):
         raise N8nWorkflowError(
-            f"its webhook path {path} makes no valid name; set one in the Job Form's Notes"
+            f"its webhook path {path} makes no valid name; after workflows- use a lowercase "
+            "letter, then letters, digits or dashes"
         )
     return name
 
@@ -335,7 +359,7 @@ class N8nProvider:
         path = webhook.parameters.get("path")
         if not isinstance(path, str) or not path:
             raise N8nWorkflowError("its webhook has no path")
-        name = manifest.name or _name_from_path(path)
+        name = _name_from_path(path)
         title = form_node.parameters.get("formTitle")
         description = form_node.parameters.get("formDescription")
         form = _form(name, form_node, manifest)
