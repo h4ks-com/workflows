@@ -348,7 +348,8 @@ def test_user_page_shows_job_history(
     response = client.get("/u/alice")
 
     assert response.status_code == 200
-    assert "song · waiting for confirmation · <time" in response.text
+    assert "song · alice · waiting for confirmation · <time" in response.text
+    assert ">open<" not in response.text
     assert ">just now</time>" in response.text
 
 
