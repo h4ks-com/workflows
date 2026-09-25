@@ -12,6 +12,8 @@ DEFAULT_FIRST_EVENT_TIMEOUT_SECONDS = 120
 
 @dataclass(frozen=True)
 class Settings:
+    """Every setting the service reads, all listed in `.env.example`."""
+
     session_secret: str
     database_url: str = DEFAULT_DATABASE_URL
     base_url: str = DEFAULT_BASE_URL
@@ -54,6 +56,7 @@ def _username_list(raw: str) -> frozenset[str]:
 
 
 def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
+    """Read the settings from environment variables."""
     return Settings(
         session_secret=environ["SESSION_SECRET"],
         database_url=environ.get("DATABASE_URL", DEFAULT_DATABASE_URL),

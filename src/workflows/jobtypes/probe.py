@@ -19,6 +19,8 @@ class ProbeError(Exception):
 
 @dataclass(frozen=True)
 class Probe:
+    """The length and title of the media behind a link."""
+
     duration_seconds: float
     title: str
 
@@ -35,10 +37,14 @@ class ProbeInfo(BaseModel):
 
 
 class Prober(Protocol):
+    """Reads the length and title of the media behind a link."""
+
     async def info(self, url: str) -> Probe: ...
 
 
 class YtdlProber:
+    """Probes links through the ytdl service, a few at a time."""
+
     def __init__(self, http: httpx.AsyncClient, base_url: str, api_key: str) -> None:
         self._http = http
         self._base_url = base_url

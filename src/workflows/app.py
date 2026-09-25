@@ -178,6 +178,7 @@ def _register_routers(app: FastAPI) -> None:
 
 
 def default_providers(settings: Settings, http: httpx.AsyncClient) -> list[Provider]:
+    """Pick the job type providers the settings enable."""
     services: list[Provider] = [
         ServiceProvider(http, url, settings.workflow_service_token)
         for url in settings.workflow_services
@@ -213,6 +214,7 @@ def create_app(
     prober: Prober | None = None,
     providers: Sequence[Provider] | None = None,
 ) -> FastAPI:
+    """Build the app with its routers, middleware, background tasks and job type catalog."""
     settings = settings or load_settings()
     http = httpx.AsyncClient()
     probe_http = httpx.AsyncClient(limits=PROBE_LIMITS)

@@ -145,6 +145,8 @@ def result_urls(job: Job, status: JobStatus) -> list[str]:
 
 
 class WebhookNotifier:
+    """Tells a job's webhook and every subscription about each status change, best effort."""
+
     def __init__(
         self,
         sessions: sessionmaker[Session],

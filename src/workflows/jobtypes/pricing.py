@@ -77,6 +77,12 @@ def _check(node: ast.AST) -> None:
 
 
 class PriceRule:
+    """A price in credits, written as a safe expression over the params.
+
+    It allows numbers, field names, `+ - * /`, comparisons, `a if condition else b` and
+    `duration(field)`, the length in seconds of the media behind a link field.
+    """
+
     def __init__(self, expression: str) -> None:
         try:
             tree = ast.parse(expression, mode="eval")
@@ -98,6 +104,10 @@ class PriceRule:
         }
 
     def evaluate(self, params: JsonObject, probe: Probe | None) -> int:
+        """Compute the price in whole credits.
+
+        :param probe: the probe of the `duration` field's media, when the rule reads one.
+        """
         return round(_number(self._value(self._body, params, probe)))
 
     def _value(self, node: ast.expr, params: JsonObject, probe: Probe | None) -> JsonValue:

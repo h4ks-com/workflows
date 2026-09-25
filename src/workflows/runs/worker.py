@@ -36,6 +36,8 @@ class Dispatch:
 
 
 class QueueWorker:
+    """Runs one job at a time and fails a running job that goes silent."""
+
     def __init__(
         self,
         sessions: sessionmaker[Session],

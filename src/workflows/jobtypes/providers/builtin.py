@@ -237,6 +237,7 @@ BUILTINS = (
 
 
 def builtin_job_types(http: httpx.AsyncClient, n8n_url: str, token: str) -> list[JobType]:
+    """Build the built-in job types, run by n8n webhooks under `n8n_url`."""
     return [
         JobType(
             name=builtin.name,
@@ -255,4 +256,5 @@ def builtin_job_types(http: httpx.AsyncClient, n8n_url: str, token: str) -> list
 
 
 def builtin_provider(http: httpx.AsyncClient, n8n_url: str, token: str) -> StaticProvider:
+    """Serve the built-in job types, for running without an n8n API key."""
     return StaticProvider(builtin_job_types(http, n8n_url, token))

@@ -132,6 +132,7 @@ def ensure_available(job_type: JobType) -> None:
 def create_job(
     session: Session, job_type: JobType, params: JsonObject, quote: Quote, owner: User | None
 ) -> Job:
+    """Create a job at its quoted price, waiting for confirmation until it is enqueued."""
     job = Job(
         type=job_type.name,
         params=params,
@@ -146,6 +147,10 @@ def create_job(
 
 
 def enqueue(session: Session, job: Job, owner: User) -> None:
+    """Reserve the job's credits and put it in line.
+
+    :raises InsufficientCreditsError: when the owner cannot pay the quote.
+    """
     if job.status != JobStatus.AWAITING_CONFIRMATION:
         raise JobError(f"job is {job.status}")
     job.owner = owner
@@ -164,6 +169,7 @@ def running_job(session: Session) -> Job | None:
 
 
 def start(job: Job) -> str:
+    """Mark the job running and return the bearer token its executor calls back with."""
     token = secrets.token_urlsafe(32)
     job.status = JobStatus.RUNNING
     job.started_at = utcnow()
@@ -177,18 +183,24 @@ def _finish(job: Job, status: JobStatus) -> None:
 
 
 def succeed(session: Session, job: Job, result: JsonObject) -> None:
+    """Finish the job with its result and capture the reserved credits."""
     job.result = result
     _finish(job, JobStatus.SUCCEEDED)
     capture(session, job)
 
 
 def fail(session: Session, job: Job, message: str) -> None:
+    """Finish the job with an error and refund the reserved credits."""
     job.error = message
     _finish(job, JobStatus.FAILED)
     refund(session, job)
 
 
 def cancel(session: Session, job: Job) -> None:
+    """Cancel a job that has not finished and refund it.
+
+    :raises JobError: when the job already ended.
+    """
     if job.status in TERMINAL_STATUSES:
         raise JobError(f"job is already {job.status}")
     _finish(job, JobStatus.CANCELLED)
@@ -206,6 +218,11 @@ def is_terminal_repeat(job: Job, event: ExecutorEvent) -> bool:
 
 
 def apply_event(session: Session, job: Job, job_type: JobType, event: ExecutorEvent) -> JsonObject:
+    """Record one executor event on a running job and apply it.
+
+    :raises JobError: when the job is not running.
+    :raises InvalidEventError: when a step is not one of the job type's steps.
+    """
     if job.status != JobStatus.RUNNING:
         raise JobError(f"job is {job.status}")
     if isinstance(event, StepEvent) and event.step not in job_type.step_names():
@@ -237,6 +254,7 @@ def expire_stale_confirmations(session: Session) -> list[Job]:
 
 
 def announce(bus: EventBus, job: Job) -> None:
+    """Publish the job's status to its live page and the queue."""
     event = BusEvent(STATUS_EVENT, {"job_id": job.id, "status": job.status})
     bus.publish(job_topic(job.id), event)
     bus.publish(QUEUE_TOPIC, event)

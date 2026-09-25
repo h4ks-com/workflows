@@ -49,6 +49,7 @@ def _record(
 
 
 def grant_daily(session: Session, user: User) -> None:
+    """Reset the free balance to the daily allowance on the user's first action of a UTC day."""
     today = utcnow().date()
     session.refresh(user, BALANCE_COLUMNS)
     if user.free_day == today:
@@ -63,6 +64,10 @@ def grant_daily(session: Session, user: User) -> None:
 
 
 def reserve(session: Session, user: User, job: Job) -> None:
+    """Hold the job's quote, spending free credits first.
+
+    :raises InsufficientCreditsError: when free and paid credits together fall short.
+    """
     grant_daily(session, user)
     available = user.free_credits + user.paid_credits
     if available < job.quote:
@@ -80,11 +85,13 @@ def reserve(session: Session, user: User, job: Job) -> None:
 
 
 def capture(session: Session, job: Job) -> None:
+    """Record that the job's held credits are spent."""
     if job.owner is not None:
         _record(session, job.owner, LedgerKind.CAPTURE, job=job)
 
 
 def refund(session: Session, job: Job) -> None:
+    """Return the job's held credits; free credits come back only on the day they were held."""
     if job.owner is None or job.reserved_free + job.reserved_paid == 0:
         return
     session.refresh(job.owner, BALANCE_COLUMNS)
@@ -102,6 +109,10 @@ def refund(session: Session, job: Job) -> None:
 
 
 def topup(session: Session, user: User, beans: int, beans_txn_id: str) -> bool:
+    """Add paid credits for a Beans transfer, once per transfer id.
+
+    :return: False when the transfer was already counted.
+    """
     if session.scalar(select(LedgerEntry.id).where(LedgerEntry.beans_txn_id == beans_txn_id)):
         return False
     entry = _record(session, user, LedgerKind.TOPUP, paid_delta=beans * CREDITS_PER_BEAN)
@@ -110,6 +121,10 @@ def topup(session: Session, user: User, beans: int, beans_txn_id: str) -> bool:
 
 
 def adjust(session: Session, user: User, credits: int, note: str) -> None:
+    """Add or take paid credits as an admin, with a note.
+
+    :raises InsufficientCreditsError: when it would take more than the user has.
+    """
     session.refresh(user, BALANCE_COLUMNS)
     if user.paid_credits + credits < 0:
         raise InsufficientCreditsError(-credits, user.paid_credits)

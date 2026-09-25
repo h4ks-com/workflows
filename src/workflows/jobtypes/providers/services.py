@@ -28,6 +28,8 @@ class ServiceManifest(BaseModel):
 
 
 class ServiceProvider:
+    """Serves the job type a standalone service describes at `/v1/workflow`."""
+
     def __init__(self, http: httpx.AsyncClient, base_url: str, token: str) -> None:
         self._http = http
         self._base_url = base_url.rstrip("/")

@@ -35,11 +35,12 @@ Code lives under `src/workflows/`, grouped by domain; `tests/` mirrors the same 
 
 ## Code style
 - Modern static type hints for Python: `dict` and `list` (not `Dict`/`List`), `X | None` (not `Union`/`Optional`). PEP 695 generics (`def f[T]()`). Compatible with mypy strict. Type hints required on function/method signatures and arguments, not local variables.
-- Imports only at the top of a module, never inside functions.
+- Imports only at the top of a module, never inside functions, one name per import line (ruff enforces it).
 - No `Any` and no bare `object` as a type annotation. Use dataclasses, Pydantic models, or concrete types.
 - Every API model field has `Field(description=...)`.
 - Low complexity, enforced by ruff: cyclomatic complexity 10, at most 10 branches, 6 returns, 40 statements and 6 arguments per function. Split a function that trips these into well-named smaller ones; never raise the limits or add `noqa`.
 - Comments only to explain the non-obvious why, never the what. Default to zero.
+- Main interfaces and functions (providers, executors, the catalog, forms, pricing, the job lifecycle, the ledger) carry a docstring: one imperative line, then `:param:`, `:return:` or `:raises:` only when they add something. Ruff checks every docstring against pep257.
 - Descriptive, explicit variable names. Keep solutions short and simple.
 - No bare `except`. Catch only the exceptions actually expected.
 

@@ -52,8 +52,13 @@ target-version = "py314"
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PIE", "RET", "RUF", "C90", "PLR"]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PIE", "RET", "RUF", "C90", "PLR", "D"]
+# We check the shape of every docstring and write them where they help, so none is forced.
+ignore = ["D100", "D101", "D102", "D103", "D104", "D105", "D106", "D107"]
 fixable = ["ALL"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
 
 [tool.ruff.lint.isort]
 force-single-line = true

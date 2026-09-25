@@ -12,6 +12,8 @@ MISSING_KEY_CODE = "NoSuchKey"
 
 
 class Storage(Protocol):
+    """Deletes stored result files."""
+
     async def remove(self, bucket: str, key: str) -> None: ...
 
 
@@ -45,6 +47,7 @@ def object_location(endpoint: str, url: str) -> tuple[str, str] | None:
 
 
 def build_storage(settings: Settings) -> Storage | None:
+    """Connect to MinIO, or return None when no MinIO endpoint is configured."""
     if not (settings.minio_endpoint and settings.minio_access_key and settings.minio_secret_key):
         return None
     client = Minio(

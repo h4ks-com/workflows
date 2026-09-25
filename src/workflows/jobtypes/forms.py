@@ -36,6 +36,8 @@ VALUE_TYPES: dict[ValueType, type] = {
 
 @dataclass(frozen=True)
 class FieldSpec:
+    """One form field: how the site renders it and how its value is validated."""
+
     name: str
     label: str
     description: str
@@ -114,6 +116,8 @@ def _field_info(spec: FieldSpec) -> object:
 
 @dataclass(frozen=True)
 class Form:
+    """A job type's form, the one source for the web form, its JSON schema and validation."""
+
     title: str
     fields: tuple[FieldSpec, ...]
 
@@ -127,9 +131,14 @@ class Form:
         return model
 
     def validate(self, raw: JsonObject) -> JsonObject:
+        """Validate raw params strictly and return them normalised.
+
+        :raises pydantic.ValidationError: when a field is missing, unknown, invalid or hidden.
+        """
         return self._model.model_validate(raw).model_dump(mode="json")
 
     def json_schema(self) -> JsonObject:
+        """Describe the params as a JSON schema for the API and MCP."""
         return self._model.model_json_schema()
 
 
@@ -214,6 +223,7 @@ def _field_from_schema(name: str, prop: JsonObject, required: bool) -> FieldSpec
 
 
 def form_from_schema(schema: JsonObject) -> Form:
+    """Build a form from a JSON schema, reading the `x-upload` and `x-show-when` extensions."""
     required = schema.get("required")
     required_names = set(required) if isinstance(required, list) else set()
     properties = _as_object(schema.get("properties"))

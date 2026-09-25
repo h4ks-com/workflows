@@ -29,12 +29,16 @@ class ProviderError(Exception):
 
 @dataclass(frozen=True)
 class Step:
+    """One stage an executor reports, with its share of the progress bar."""
+
     name: str
     weight: int
 
 
 @dataclass(frozen=True)
 class Quote:
+    """What a job costs in credits and how many seconds it should take."""
+
     credits: int
     estimate_seconds: int
     probe: Probe | None
@@ -42,6 +46,8 @@ class Quote:
 
 @dataclass(frozen=True)
 class DispatchRequest:
+    """A job as its executor receives it."""
+
     job_id: int
     type: str
     params: JsonObject
@@ -61,10 +67,18 @@ class DispatchRequest:
 
 
 class Executor(Protocol):
+    """Runs jobs elsewhere and reports back through each job's callback URL.
+
+    `dispatch` answers "accepted", "refused" when the executor turned the job down, or
+    "unconfirmed" when it did not answer in time and the job may still be running.
+    """
+
     async def dispatch(self, request: DispatchRequest) -> DispatchOutcome: ...
 
 
 class HttpExecutor:
+    """Posts each job as JSON to one URL with the executor key in `X-API-Key`."""
+
     def __init__(self, http: httpx.AsyncClient, url: str, token: str) -> None:
         self._http = http
         self.url = url
@@ -90,6 +104,8 @@ class HttpExecutor:
 
 @dataclass(frozen=True)
 class JobType:
+    """One kind of job: its form, price, steps and the executor that runs it."""
+
     name: str
     title: str
     description: str
@@ -110,6 +126,7 @@ class JobType:
         return self.form.validate(raw)
 
     async def quote(self, params: JsonObject, prober: Prober) -> Quote:
+        """Price validated params, probing the media behind the price's `duration` field."""
         media_field = self.price.media_field
         media_url = params.get(media_field) if media_field else None
         probe = await prober.info(media_url) if isinstance(media_url, str) else None
@@ -118,6 +135,10 @@ class JobType:
 
 
 def form_price(form: Form, expression: str) -> PriceRule:
+    """Parse a price expression that may only read fields the form has.
+
+    :raises PriceError: when the expression is invalid or reads an unknown field.
+    """
     price = PriceRule(expression)
     missing = price.fields - {spec.name for spec in form.fields}
     if missing:
@@ -126,6 +147,7 @@ def form_price(form: Form, expression: str) -> PriceRule:
 
 
 def retired_type(name: str) -> JobType:
+    """Stand in for a job type no provider offers any more, so its old jobs still render."""
     return JobType(
         name=name,
         title=name,
@@ -138,12 +160,20 @@ def retired_type(name: str) -> JobType:
 
 
 class Provider(Protocol):
+    """A source of job types.
+
+    The catalog calls `discover` on startup and every minute. `errors` maps each entry the
+    provider skipped to the reason, for the admin page.
+    """
+
     errors: dict[str, str]
 
     async def discover(self) -> list[JobType]: ...
 
 
 class StaticProvider:
+    """Serves a fixed list of job types."""
+
     def __init__(self, job_types: Sequence[JobType]) -> None:
         self._job_types = list(job_types)
         self.errors: dict[str, str] = {}
@@ -153,12 +183,15 @@ class StaticProvider:
 
 
 class Catalog:
+    """Merges the job types of every provider; the rest of the app reads job types only here."""
+
     def __init__(self, providers: Sequence[Provider]) -> None:
         self._providers = list(providers)
         self._found: list[list[JobType]] = [[] for _ in self._providers]
         self._types: dict[str, JobType] = {}
 
     async def refresh(self) -> None:
+        """Ask every provider again, keeping a provider's last good list on `ProviderError`."""
         results = await asyncio.gather(
             *(provider.discover() for provider in self._providers), return_exceptions=True
         )
@@ -190,6 +223,7 @@ class Catalog:
         return self._types.get(name)
 
     def find(self, name: str) -> JobType:
+        """Return the job type, or a retired stand-in for a name no provider offers."""
         return self._types.get(name) or retired_type(name)
 
     def all(self) -> list[JobType]:

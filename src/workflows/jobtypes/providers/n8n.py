@@ -260,6 +260,8 @@ def _pricing_text(price: PriceRule) -> str:
 
 
 class N8nProvider:
+    """Serves every active n8n workflow tagged `h4ks-workflows` as a job type."""
+
     def __init__(
         self, http: httpx.AsyncClient, base_url: str, api_key: str, executor_token: str
     ) -> None:
