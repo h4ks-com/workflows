@@ -177,6 +177,11 @@ def start(job: Job) -> str:
     return token
 
 
+def note(session: Session, job: Job, message: str) -> None:
+    """Add our own line to the job's run log, which does not count as executor activity."""
+    session.add(JobEvent(job_id=job.id, kind="log", data={"message": one_line(message)[:500]}))
+
+
 def _finish(job: Job, status: JobStatus) -> None:
     job.status = status
     job.finished_at = utcnow()

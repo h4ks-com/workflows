@@ -51,6 +51,7 @@ from workflows.jobtypes.providers.services import ServiceProvider
 from workflows.runs.bus import EventBus
 from workflows.runs.jobs import InvalidEventError
 from workflows.runs.jobs import JobError
+from workflows.runs.media import build_stager
 from workflows.runs.webhooks import WEBHOOK_TIMEOUT_SECONDS
 from workflows.runs.webhooks import WebhookNotifier
 from workflows.runs.worker import QueueWorker
@@ -223,7 +224,7 @@ def create_app(
     sessions = session_factory(engine)
     catalog = Catalog(providers if providers is not None else default_providers(settings, http))
     bus = EventBus()
-    worker = QueueWorker(sessions, catalog, bus, settings)
+    worker = QueueWorker(sessions, catalog, bus, settings, build_stager(settings, http))
     beans_poller = BeansPoller(sessions, http, settings) if settings.beans_token else None
     webhook_http = httpx.AsyncClient(timeout=WEBHOOK_TIMEOUT_SECONDS)
     notifier = WebhookNotifier(sessions, catalog, bus, webhook_http, settings.base_url)

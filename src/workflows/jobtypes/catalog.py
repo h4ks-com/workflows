@@ -2,6 +2,7 @@ import asyncio
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
+from dataclasses import field
 from typing import Literal
 from typing import Protocol
 
@@ -54,12 +55,14 @@ class DispatchRequest:
     steps: list[str]
     callback_url: str
     callback_token: str
+    media: JsonObject = field(default_factory=dict)
 
     def payload(self) -> JsonObject:
         return {
             "job_id": self.job_id,
             "type": self.type,
             "params": self.params,
+            "media": self.media,
             "steps": list(self.steps),
             "callback_url": self.callback_url,
             "callback_token": self.callback_token,

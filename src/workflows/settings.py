@@ -38,6 +38,7 @@ class Settings:
     minio_access_key: str = ""
     minio_secret_key: str = ""
     minio_use_ssl: bool = True
+    inputs_bucket: str = ""
     upload_url: str = ""
 
     def __post_init__(self) -> None:
@@ -90,5 +91,6 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
         minio_access_key=environ.get("MINIO_ACCESS_KEY", ""),
         minio_secret_key=environ.get("MINIO_SECRET_KEY", ""),
         minio_use_ssl=environ.get("MINIO_USE_SSL", "true").strip().lower() == "true",
+        inputs_bucket=environ.get("INPUTS_BUCKET", ""),
         upload_url=environ.get("UPLOAD_URL", ""),
     )

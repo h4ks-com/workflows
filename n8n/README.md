@@ -26,7 +26,7 @@ Every field needs a Field Name, which becomes the param name the executor receiv
 | Textarea | text area, 2000 characters | string |
 | Number | number input | integer, or a float when the default value has a decimal point |
 | Dropdown or Radio | buttons, one choice | one of the options |
-| File | link, upload or drag and drop, with its accepted types | an `https` URL |
+| File | link, upload or drag and drop, with its accepted types | an `https` URL; for audio, a private link to the downloaded file |
 | Checkbox with exactly one option | checkbox; the default is checked when it equals the option | boolean |
 | Custom HTML | help text of the field before it; after a dropdown, each `<img src="https://..." alt="option">` becomes the picture on that option | nothing |
 | Hidden Field | ignored | nothing |
@@ -66,8 +66,10 @@ Fuller ones, from the image job:
 The service posts this JSON to the webhook with the `X-API-Key` header:
 
 ```json
-{"job_id": 7, "type": "image", "params": {"prompt": "a cat", "model": "z-image"}, "steps": ["generate", "store"], "callback_url": "https://workflows.example.com/api/jobs/7/events", "callback_token": "..."}
+{"job_id": 7, "type": "image", "params": {"prompt": "a cat", "model": "z-image"}, "media": {}, "steps": ["generate", "store"], "callback_url": "https://workflows.example.com/api/jobs/7/events", "callback_token": "..."}
 ```
+
+For a File field that accepts audio, the service first downloads the link with ytdl, so people can paste any page yt-dlp reads, such as YouTube or SoundCloud. The field's param is then a private link to the downloaded audio, valid for 12 hours, and `media` holds what the page said about it, for example `{"url": {"title": "Some Song", "duration": 213.0}}`. The workflow downloads that link directly and needs no ytdl step of its own.
 
 The workflow then posts events to `callback_url` with `Authorization: Bearer <callback_token>`:
 
