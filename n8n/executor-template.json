@@ -1,0 +1,170 @@
+{
+  "name": "Workflows Executor: Template",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "workflows-template",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "name": "Job In",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "webhookId": "workflows-template-executor"
+    },
+    {
+      "parameters": {
+        "authentication": "n8nUserAuth",
+        "formTitle": "Template",
+        "formDescription": "Say hello to someone.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Name",
+              "fieldType": "text",
+              "fieldName": "name",
+              "placeholder": "Who to greet.",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {
+          "appendAttribution": false,
+          "path": "workflows-template-form"
+        }
+      },
+      "name": "Job Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [0, 320],
+      "webhookId": "workflows-template-form",
+      "notes": "{\n  \"price\": \"10\",\n  \"steps\": [[\"greet\", 100]]\n}",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const MANUAL_SINK = \"https://n8n.example.com/webhook/workflows-manual-sink\";\nconst form = $input.first().json;\nconst params = {};\nfor (const [key, value] of Object.entries(form)) {\n  if (key === \"submittedAt\" || key === \"formMode\") continue;\n  if (value === \"\" || value === null || value === undefined) continue;\n  params[key] = value;\n}\nreturn [{ json: { body: { job_id: \"manual\", params, callback_url: MANUAL_SINK, callback_token: \"\" } } }];"
+      },
+      "name": "From Form",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [224, 320]
+    },
+    {
+      "parameters": {
+        "jsCode": "const CALLBACK_PREFIX = \"https://workflows.example.com/api/jobs/\";\nconst MANUAL_SINK = \"https://n8n.example.com/webhook/workflows-manual-sink\";\nconst body = $input.first().json.body || {};\nconst callbackUrl = String(body.callback_url || \"\");\nif (!callbackUrl.startsWith(CALLBACK_PREFIX) && callbackUrl !== MANUAL_SINK) throw new Error(\"callback_url points somewhere unexpected\");\nconst params = body.params || {};\nreturn [{ json: { job_id: body.job_id, callback_url: callbackUrl, callback_token: String(body.callback_token || \"\"), name: String(params.name || \"\").slice(0, 200) } }];"
+      },
+      "name": "Read Job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [448, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Read Job').first().json.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Read Job').first().json.callback_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"kind\":\"step\",\"step\":\"greet\"}",
+        "options": { "timeout": 10000 }
+      },
+      "name": "Report Greet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [672, -160],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $(\"Read Job\").first().json;\nreturn [{ json: { title: `hello, ${job.name}` } }];"
+      },
+      "name": "Do The Work",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [672, 0],
+      "onError": "continueErrorOutput",
+      "notes": "Replace this with the real work. Store any files in a public bucket and pass their URLs to Report Result."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Read Job').first().json.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Read Job').first().json.callback_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ kind: \"result\", title: $json.title, files: [] }) }}",
+        "options": { "timeout": 30000 }
+      },
+      "name": "Report Result",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [896, -64],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Read Job').first().json.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Read Job').first().json.callback_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ kind: \"error\", message: \"the run failed; ask an admin to check n8n execution \" + $execution.id }) }}",
+        "options": { "timeout": 30000 }
+      },
+      "name": "Report Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [896, 160],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    }
+  ],
+  "connections": {
+    "Job In": { "main": [[{ "node": "Read Job", "type": "main", "index": 0 }]] },
+    "Job Form": { "main": [[{ "node": "From Form", "type": "main", "index": 0 }]] },
+    "From Form": { "main": [[{ "node": "Read Job", "type": "main", "index": 0 }]] },
+    "Read Job": {
+      "main": [[
+        { "node": "Report Greet", "type": "main", "index": 0 },
+        { "node": "Do The Work", "type": "main", "index": 0 }
+      ]]
+    },
+    "Do The Work": {
+      "main": [
+        [{ "node": "Report Result", "type": "main", "index": 0 }],
+        [{ "node": "Report Error", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" }
+}

@@ -28,13 +28,14 @@ SESSION_SECRET = "test-secret"
 SERVICE_TOKEN = "service-token"
 EXECUTOR_TOKEN = "executor-token"
 BASE_URL = "https://workflows.example"
+BEANS_URL = "https://beans.example"
 N8N_URL = "https://n8n.test"
 PARODY_EXECUTOR = "https://n8n.test/webhook/workflows-parody"
 SONG_EXECUTOR = "https://n8n.test/webhook/workflows-song"
 SONG_URL = "https://youtube.example/watch?v=song"
 FETCH_HEADERS = {"X-Requested-With": "fetch"}
 NO_EXECUTOR_YET = {"voice", "podcast", "image"}
-MINIO_ENDPOINT = "s3-api.t3ks.com"
+MINIO_ENDPOINT = "s3.example"
 
 
 @dataclass
@@ -87,6 +88,8 @@ def settings(tmp_path: Path) -> Settings:
         admin_users=frozenset({"root"}),
         n8n_url=N8N_URL,
         executor_token=EXECUTOR_TOKEN,
+        beans_url=BEANS_URL,
+        upload_url="https://files.example/api/",
     )
 
 

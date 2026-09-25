@@ -310,7 +310,7 @@ async def test_notify_posts_every_status_to_every_subscription(
     routes = [respx.post(url).respond(204) for url in SUB_URLS]
     for url in SUB_URLS:
         subscribe(client, url)
-    job = make_job(session, services, make_user(session, "mattf"))
+    job = make_job(session, services, make_user(session, "carol"))
     job.queued_at = utcnow()
     job.status = status
     job.error = "the executor crashed"
@@ -327,7 +327,7 @@ async def test_notify_posts_every_status_to_every_subscription(
         "type": "song",
         "type_title": "Song",
         "status": status,
-        "owner": "mattf",
+        "owner": "carol",
         "title": "Cat Song" if status == JobStatus.SUCCEEDED else None,
         "run_url": run_url,
         "result_urls": result_urls,
@@ -382,7 +382,7 @@ async def test_web_submission_notifies_subscriptions_that_it_was_queued(
 ) -> None:
     route = respx.post(HOOK_URL).respond(204)
     subscribe(client, HOOK_URL)
-    user = make_user(session, "mattf", paid_credits=10_000)
+    user = make_user(session, "carol", paid_credits=10_000)
     task = asyncio.create_task(notifier.run())
     await asyncio.sleep(0)
 
@@ -403,7 +403,7 @@ async def test_web_submission_notifies_subscriptions_that_it_was_queued(
 
     job_id = response.json()["id"]
     payload = json.loads(route.calls.last.request.content)
-    assert (payload["job_id"], payload["status"], payload["owner"]) == (job_id, "queued", "mattf")
+    assert (payload["job_id"], payload["status"], payload["owner"]) == (job_id, "queued", "carol")
 
 
 @respx.mock

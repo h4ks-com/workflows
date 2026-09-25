@@ -19,8 +19,24 @@ IMAGE_WORKFLOW: JsonObject = json.loads(
 )
 
 
+TEMPLATE_PATH = Path(__file__).parents[3] / "n8n" / "executor-template.json"
+
+
 def provider() -> N8nProvider:
     return N8nProvider(httpx.AsyncClient(), N8N, "api-key", "executor-key")
+
+
+@respx.mock
+async def test_the_documented_template_is_a_valid_executor() -> None:
+    template: JsonObject = {"id": "template", **json.loads(TEMPLATE_PATH.read_text())}
+    respx.get(LIST_URL).respond(json={"data": [template], "nextCursor": None})
+    n8n = provider()
+
+    [greeting] = await n8n.discover()
+
+    assert n8n.errors == {}
+    assert (greeting.name, greeting.step_names()) == ("template", ["greet"])
+    assert [spec.name for spec in greeting.form.fields] == ["name"]
 
 
 def node(workflow: JsonObject, node_type: str) -> JsonObject:

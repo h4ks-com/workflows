@@ -169,7 +169,7 @@ def test_responses_carry_security_headers(client: TestClient) -> None:
     headers = client.get("/api/types").headers
 
     assert "frame-ancestors 'none'" in headers["content-security-policy"]
-    assert "form-action 'self' https://beans.h4ks.com" in headers["content-security-policy"]
+    assert "form-action 'self' https://beans.example" in headers["content-security-policy"]
     assert headers["strict-transport-security"] == "max-age=31536000"
     assert headers["x-content-type-options"] == "nosniff"
     assert headers["referrer-policy"] == "same-origin"

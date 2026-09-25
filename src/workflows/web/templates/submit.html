@@ -31,7 +31,7 @@
     {% elif f.accept %}
     <div class="upload">
       <input id="f-{{ f.name }}" type="url" name="{{ f.name }}" value="{{ f.default or '' }}"{{ " required" if f.required }} placeholder="paste a link or drop a file here">
-      <label class="btn ghost">upload<input type="file" accept="{{ f.accept }}" data-upload-for="f-{{ f.name }}" hidden></label>
+      {% if upload_url %}<label class="btn ghost">upload<input type="file" accept="{{ f.accept }}" data-upload-for="f-{{ f.name }}" hidden></label>{% endif %}
     </div>
     {% else %}
     <input id="f-{{ f.name }}" type="text" name="{{ f.name }}" value="{{ f.default or '' }}"{{ " required" if f.required }}>

@@ -8,7 +8,7 @@ services:
       SESSION_SECRET: local-session-secret
       BASE_URL: http://localhost:8000
       SERVICE_TOKEN: local-service-token
-      WORKFLOWS_ADMIN_USERS: mattf
+      WORKFLOWS_ADMIN_USERS: admin
       WORKFLOWS_EXECUTOR_TOKEN: fake-executor-key
       N8N_URL: http://localhost:9000
       YTDL_URL: http://localhost:9000

@@ -6,7 +6,7 @@ from minio.error import S3Error
 from workflows.settings import Settings
 from workflows.storage import MinioStorage, build_storage, object_location
 
-ENDPOINT = "s3-api.t3ks.com"
+ENDPOINT = "s3.example"
 
 
 @pytest.mark.parametrize(

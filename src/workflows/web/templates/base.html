@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
 <link rel="icon" href="{{ url_for('static', path='favicon.svg') }}" type="image/svg+xml">
 </head>
-<body>
+<body data-upload-url="{{ upload_url }}">
 <div class="wrap">
   <header class="bar">
     <a class="brand" href="/"><span class="mark">h4</span>workflows</a>
@@ -33,7 +33,7 @@
   <footer class="foot">
     <a href="https://h4ks.com">h4ks</a>
     <a href="https://chat.h4ks.com">chat</a>
-    <a href="https://beans.h4ks.com">beans</a>
+    {% if beans_url %}<a href="{{ beans_url }}">beans</a>{% endif %}
     <a href="https://github.com/h4ks-com/workflows">source</a>
   </footer>
 </div>

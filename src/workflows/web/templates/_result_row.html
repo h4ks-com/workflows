@@ -1,5 +1,5 @@
 {% from "_time.html" import ago %}
-<div class="res">
+<div class="res tile">
   {% set file = job.result.files[0] if job.result and job.result.files else none %}
   {% set link = job.result.links[0] if job.result and job.result.links else none %}
   {% if file and file.url is playable and file.mime is listenable %}

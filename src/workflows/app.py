@@ -4,6 +4,7 @@ import signal
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import AsyncExitStack, asynccontextmanager, suppress
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, status
@@ -46,14 +47,7 @@ ERROR_STATUS = {
 STATIC_DIR = Path(__file__).parent / "web" / "static"
 MAX_BODY_BYTES = 256 * 1024
 TOO_LARGE = "the request body is over 256 KB"
-SECURITY_HEADERS = {
-    "Content-Security-Policy": (
-        "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src https://fonts.gstatic.com; script-src 'self'; "
-        "connect-src 'self' https://s.t3ks.com; "
-        "img-src 'self' data: https://s3-api.t3ks.com; media-src 'self' https://s3-api.t3ks.com; "
-        "frame-ancestors 'none'; base-uri 'none'; form-action 'self' https://beans.h4ks.com"
-    ),
+STATIC_HEADERS = {
     "Strict-Transport-Security": "max-age=31536000",
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "same-origin",
@@ -61,19 +55,48 @@ SECURITY_HEADERS = {
 }
 
 
+def _origin(url: str) -> str:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}" if parts.scheme and parts.netloc else ""
+
+
+def security_headers(settings: Settings) -> dict[str, str]:
+    """Build the response headers, allowing only the media, upload and Beans hosts configured."""
+    media = f"https://{settings.minio_endpoint}" if settings.minio_endpoint else ""
+    directives = [
+        "default-src 'self'",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src https://fonts.gstatic.com",
+        "script-src 'self'",
+        f"connect-src 'self' {_origin(settings.upload_url)}",
+        f"img-src 'self' data: {media}",
+        f"media-src 'self' {media}",
+        "frame-ancestors 'none'",
+        "base-uri 'none'",
+        f"form-action 'self' {_origin(settings.beans_url)}",
+    ]
+    policy = "; ".join(directive.strip() for directive in directives)
+    return {"Content-Security-Policy": policy, **STATIC_HEADERS}
+
+
 async def _domain_error(request: Request, error: Exception) -> JSONResponse:
     return JSONResponse({"detail": str(error)}, status_code=ERROR_STATUS[type(error)])
 
 
-async def _security_headers(
-    request: Request, call_next: Callable[[Request], Awaitable[Response]]
-) -> Response:
-    response = await call_next(request)
-    response.headers.update(SECURITY_HEADERS)
-    is_html = response.headers.get("content-type", "").startswith("text/html")
-    if is_html and not request.url.path.startswith("/static"):
-        response.headers["Cache-Control"] = "no-store"
-    return response
+def _security_middleware(
+    headers: dict[str, str],
+) -> Callable[[Request, Callable[[Request], Awaitable[Response]]], Awaitable[Response]]:
+    async def add_headers(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        response = await call_next(request)
+        response.headers.update(headers)
+        is_html = response.headers.get("content-type", "").startswith("text/html")
+        if is_html and not request.url.path.startswith("/static"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+    return add_headers
 
 
 class BodyLimit:
@@ -142,7 +165,7 @@ def default_providers(settings: Settings, http: httpx.AsyncClient) -> list[Provi
 
 def _install_middleware(app: FastAPI, settings: Settings) -> None:
     app.add_middleware(BodyLimit)
-    app.middleware("http")(_security_headers)
+    app.middleware("http")(_security_middleware(security_headers(settings)))
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.session_secret,

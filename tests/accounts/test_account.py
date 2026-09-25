@@ -61,7 +61,7 @@ def test_topup_returns_the_beans_transfer_url(client: TestClient, session: Sessi
 
     response = client.post("/api/topups", json={"beans": 5})
 
-    assert response.json() == {"beans_url": "https://beans.h4ks.com/transfer/alice/workflows/5"}
+    assert response.json() == {"beans_url": "https://beans.example/transfer/alice/workflows/5"}
 
 
 def test_topup_rejects_out_of_range_amounts(client: TestClient, session: Session) -> None:

@@ -283,7 +283,13 @@ def render(
     page: Page, template: str, context: Mapping[str, TemplateValue], status_code: int = 200
 ) -> Response:
     me = me_chip(page.services.settings, page.user) if page.user else None
-    full: dict[str, TemplateValue] = {**context, "me": me}
+    settings = page.services.settings
+    full: dict[str, TemplateValue] = {
+        **context,
+        "me": me,
+        "beans_url": settings.beans_url,
+        "upload_url": settings.upload_url,
+    }
     return templates.TemplateResponse(page.request, template, full, status_code=status_code)
 
 

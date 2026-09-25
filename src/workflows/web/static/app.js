@@ -91,8 +91,8 @@
   document.addEventListener("DOMContentLoaded", drawWaves);
   document.body.addEventListener("htmx:afterSettle", drawWaves);
 
-  // We upload straight to the public temp file host, which keeps files for 24 hours.
-  const UPLOAD_URL = "https://s.t3ks.com/api/";
+  // We upload straight to the temporary file host the server names, so files never pass through us.
+  const UPLOAD_URL = document.body.dataset.uploadUrl;
 
   async function uploadFile(picker, file) {
     const target = document.getElementById(picker.dataset.uploadFor);

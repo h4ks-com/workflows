@@ -1,13 +1,17 @@
 # n8n workflows
 
-Every active n8n workflow tagged `h4ks-workflows` becomes a job type on workflows.h4ks.com, in the API and in the MCP. The service lists them with a read-only n8n API key every 60 seconds. A workflow that breaks the rules below is skipped, and the admin page lists it with the reason.
+Every active n8n workflow tagged `h4ks-workflows` becomes a job type on the site, in the API and in the MCP. The service lists them with a read-only n8n API key every 60 seconds. A workflow that breaks the rules below is skipped, and the admin page lists it with the reason.
+
+## Start from the template
+
+Import `executor-template.json` into n8n. It is a working executor that greets a name: set the two constants at the top of its `Read Job` and `From Form` code to your site's `/api/jobs/` URL and your manual-run sink, pick the credentials, replace `Do The Work`, then tag and publish it.
 
 ## What the workflow needs
 
 1. **The `h4ks-workflows` tag**, and the workflow is published. Remove the tag or unpublish it to take the job off the site.
-2. **An enabled Webhook trigger** with method `POST`, header auth using the `workflows executor (X-API-Key)` credential, and "respond immediately". Its path is where the service sends each job, so keep it unique, for example `workflows-image`.
+2. **An enabled Webhook trigger** with method `POST`, header auth on `X-API-Key` with the service's executor token, and "respond immediately". Its path is where the service sends each job, so keep it unique, for example `workflows-image`.
 3. **An enabled Form Trigger** whose title, description and fields are the form users fill in on the site, set to require an n8n login, with its own path (for example `workflows-image-form`, since it cannot share the webhook's). It is a real trigger: people signed in to n8n can run the workflow from it, which runs the same flow without touching anyone's credits.
-4. **Both triggers joined into one flow.** The webhook goes straight into `Read Job`. The form goes through `Form Files` (one item per uploaded file), `Has Files?`, `Store Upload` (the shared store sub-workflow, which turns each upload into a `workflows` bucket link) and `From Form`, which builds the same `params` the service sends, with the manual-run sink as `callback_url`. `Read Job` accepts callback URLs on workflows.h4ks.com and the sink, `https://n8n.t3ks.com/webhook/workflows-manual-sink`, which drops the progress and result calls of manual runs. Copy these four nodes from an existing executor.
+4. **Both triggers joined into one flow.** The webhook goes straight into `Read Job`. The form goes through `From Form`, which builds the same `params` the service sends, with a manual-run sink as `callback_url`: a webhook in your n8n that accepts and drops the progress and result calls of manual runs. `Read Job` accepts only your site's callback URLs and that sink. A form with file fields needs a step before `From Form` that stores each upload and puts its public URL in the params.
 5. **Settings in the Job Form's Notes** (node settings, Notes, with "Display note in flow" on): a small JSON object holding what a form cannot, at least the price.
 
 The service skips a workflow whose form is disabled, public, not connected to anything, or has no settings.
@@ -63,14 +67,14 @@ Fuller ones, from the image job:
 The service posts this JSON to the webhook with the `X-API-Key` header:
 
 ```json
-{"job_id": 7, "type": "image", "params": {"prompt": "a cat", "model": "z-image"}, "steps": ["generate", "store"], "callback_url": "https://workflows.h4ks.com/api/jobs/7/events", "callback_token": "..."}
+{"job_id": 7, "type": "image", "params": {"prompt": "a cat", "model": "z-image"}, "steps": ["generate", "store"], "callback_url": "https://workflows.example.com/api/jobs/7/events", "callback_token": "..."}
 ```
 
 The workflow then posts events to `callback_url` with `Authorization: Bearer <callback_token>`:
 
 - `{"kind": "step", "step": "generate"}` when a step starts, and optionally `done` and `total` for progress within it. Send the first step right away: a job with no event within 120 seconds fails.
 - `{"kind": "log", "message": "..."}` for the activity log.
-- `{"kind": "result", "title": "...", "files": [{"url": "https://...", "name": "image.png", "mime": "image/png"}], "metadata_url": "https://..."}` to finish. Store files in the public `workflows` bucket. An optional `links` list of `{"label": "...", "url": "https://..."}` adds pages that open the result, such as a player.
+- `{"kind": "result", "title": "...", "files": [{"url": "https://...", "name": "image.png", "mime": "image/png"}], "metadata_url": "https://..."}` to finish. Store files in a public bucket. An optional `links` list of `{"label": "...", "url": "https://..."}` adds pages that open the result, such as a player.
 - `{"kind": "error", "message": "..."}` to fail the job and refund the user.
 
 Give the result and error calls "retry on fail" (5 tries, 5 seconds apart) so a service restart does not lose a finished job. Text is trimmed to one line; titles and names hold 200 characters and messages 500.

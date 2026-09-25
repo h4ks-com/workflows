@@ -12,7 +12,7 @@ from workflows.accounts.beans import BeansPoller
 from workflows.settings import Settings
 from workflows.state import Services
 
-TRANSACTIONS_URL = "https://beans.h4ks.com/api/v1/transactions"
+TRANSACTIONS_URL = "https://beans.example/api/v1/transactions"
 
 
 @pytest.fixture
@@ -21,6 +21,7 @@ def poller(services: Services) -> BeansPoller:
         session_secret=services.settings.session_secret,
         database_url=services.settings.database_url,
         base_url=services.settings.base_url,
+        beans_url=services.settings.beans_url,
         beans_token="beans-token",
     )
     return BeansPoller(services.sessions, services.http, beans_settings)
