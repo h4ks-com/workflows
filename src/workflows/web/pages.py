@@ -423,6 +423,7 @@ async def user_page(username: str, page: PageCtx) -> Response:
     user_or_404(page.session, username)
     context: Context = {
         "username": username,
+        "profile_owner": username,
         "jobs": job_views(page.session, page.services, username, USER_JOB_LIMIT),
     }
     return render(page, "user.html", context)

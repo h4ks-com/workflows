@@ -348,7 +348,7 @@ def test_user_page_shows_job_history(
     response = client.get("/u/alice")
 
     assert response.status_code == 200
-    assert "song · alice · waiting for confirmation · <time" in response.text
+    assert "song · waiting for confirmation · <time" in response.text
     assert ">open<" not in response.text
     assert ">just now</time>" in response.text
 
@@ -482,7 +482,7 @@ def test_results_play_audio_and_link_other_files(
     panel = client.get(f"/partials/jobs/{job.id}").text
     home = client.get("/").text
 
-    assert 'class="play"' not in panel
+    assert 'data-src="https://bucket.example/clip.mp4"' not in panel
     assert 'href="https://bucket.example/clip.mp4"' in panel
     assert 'data-src="https://bucket.example/clip.mp4"' not in home
     assert 'href="https://bucket.example/clip.mp4"' in home

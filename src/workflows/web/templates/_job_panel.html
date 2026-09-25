@@ -59,11 +59,13 @@
     {% for file in files %}
     {% if file.url is playable %}
     {% if file.mime.startswith('image') %}<a href="{{ file.url }}"><img class="shot" src="{{ file.url }}" alt="{{ file.name }}"></a>{% endif %}
-    <div class="res">
+    <div class="res tile">
       {% if file.mime is listenable %}
       <button class="play" type="button" aria-label="play" data-src="{{ file.url }}">▶</button>
+      {% else %}
+      <a href="{{ file.url }}" class="play" aria-label="download {{ file.name }}" download>↓</a>
       {% endif %}
-      <div class="meta"><span class="t">{{ file.name }}</span><a href="{{ file.url }}" class="muted" style="font-size:12px">download</a></div>
+      <div class="meta"><span class="t"><a href="{{ file.url }}" download>{{ file.name }}</a></span><small class="muted">download</small></div>
     </div>
     {% endif %}
     {% else %}
@@ -72,7 +74,7 @@
     {% endif %}
     {% endfor %}
     {% for link in (detail.result.links if detail.result and detail.result.links else []) if link.url is playable %}
-    <div class="res"><a href="{{ link.url }}" class="play" aria-label="{{ link.label }}">▶</a><div class="meta"><a href="{{ link.url }}" class="t">{{ link.label }}</a></div></div>
+    <div class="res tile"><a href="{{ link.url }}" class="play" aria-label="{{ link.label }}">▶</a><div class="meta"><span class="t"><a href="{{ link.url }}">{{ link.label }}</a></span></div></div>
     {% endfor %}
     <span class="label">activity</span>
     <div class="log">

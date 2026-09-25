@@ -9,7 +9,7 @@
   {% elif link and link.url is playable %}
   <a href="{{ link.url }}" class="play" aria-label="{{ link.label }}">▶</a>
   {% elif file and file.url is playable %}
-  <a href="{{ file.url }}" class="muted">download</a>
+  <a href="{{ file.url }}" class="play" aria-label="download {{ file.name }}" download>↓</a>
   {% endif %}
-  <div class="meta"><span class="t"><a href="/jobs/{{ job.id }}"><b>{{ job.result.title if job.result and job.result.title else job.type ~ ' #' ~ job.id }}</b></a></span><small class="muted">{{ job.type }}{% if job.owner %} · {{ job.owner }}{% endif %}{% if job.status != 'succeeded' %} · {{ job.status|status_label }}{% endif %} · {{ ago(job.finished_at or job.created_at) }}</small>{% if file and file.mime is listenable %}<canvas class="wave" data-seed="{{ job.id }}"></canvas>{% endif %}</div>
+  <div class="meta"><span class="t"><a href="/jobs/{{ job.id }}"><b>{{ job.result.title if job.result and job.result.title else job.type ~ ' #' ~ job.id }}</b></a></span><small class="muted">{{ job.type }}{% if job.owner and job.owner != profile_owner %} · {{ job.owner }}{% endif %}{% if job.status != 'succeeded' %} · {{ job.status|status_label }}{% endif %} · {{ ago(job.finished_at or job.created_at) }}</small>{% if file and file.mime is listenable %}<canvas class="wave" data-seed="{{ job.id }}"></canvas>{% endif %}</div>
 </div>
