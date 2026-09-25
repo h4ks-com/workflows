@@ -129,7 +129,8 @@ def _register_routers(app: FastAPI) -> None:
 
 def default_providers(settings: Settings, http: httpx.AsyncClient) -> list[Provider]:
     services: list[Provider] = [
-        ServiceProvider(http, url, settings.executor_token) for url in settings.workflow_services
+        ServiceProvider(http, url, settings.workflow_service_token)
+        for url in settings.workflow_services
     ]
     if settings.n8n_url and settings.n8n_api_key:
         n8n = N8nProvider(http, settings.n8n_url, settings.n8n_api_key, settings.executor_token)

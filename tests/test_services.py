@@ -62,7 +62,7 @@ async def test_discover_reads_the_manifest_into_a_job_type() -> None:
 @respx.mock
 @pytest.mark.parametrize(
     ("change", "error"),
-    [({"price": "open('x')"}, "price is invalid"), ({"price": "size * 2"}, "size")],
+    [({"price": "open('x')"}, "only call allowed"), ({"price": "size * 2"}, "size")],
 )
 async def test_a_bad_price_is_skipped_and_reported(
     change: dict[str, JsonValue], error: str

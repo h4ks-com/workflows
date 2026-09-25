@@ -32,3 +32,9 @@ def test_session_secret_is_required() -> None:
 def test_n8n_url_requires_executor_token() -> None:
     with pytest.raises(ValueError, match="WORKFLOWS_EXECUTOR_TOKEN"):
         Settings(session_secret="secret", n8n_url="https://n8n.h4ks.com")
+
+
+def test_workflow_services_require_their_own_token() -> None:
+    services = ("http://midifier.test:8000",)
+    with pytest.raises(ValueError, match="WORKFLOW_SERVICE_TOKEN"):
+        Settings(session_secret="secret", workflow_services=services, executor_token="n8n-key")

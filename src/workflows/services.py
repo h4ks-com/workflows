@@ -1,10 +1,10 @@
 import httpx
 from pydantic import BaseModel, Field, ValidationError
 
-from workflows.catalog import HttpExecutor, JobType, ProviderError, Step
+from workflows.catalog import HttpExecutor, JobType, ProviderError, Step, form_price
 from workflows.db import JsonObject
 from workflows.forms import form_from_schema
-from workflows.pricing import PriceError, PriceRule
+from workflows.pricing import PriceError
 
 MANIFEST_PATH = "/v1/workflow"
 JOBS_PATH = "/v1/workflow/jobs"
@@ -22,23 +22,19 @@ class ServiceManifest(BaseModel):
 
 
 class ServiceProvider:
-    def __init__(self, http: httpx.AsyncClient, base_url: str, executor_token: str) -> None:
+    def __init__(self, http: httpx.AsyncClient, base_url: str, token: str) -> None:
         self._http = http
         self._base_url = base_url.rstrip("/")
-        self._executor_token = executor_token
+        self._token = token
         self.errors: dict[str, str] = {}
 
     async def discover(self) -> list[JobType]:
         manifest = await self._manifest()
         form = form_from_schema(manifest.params_schema)
         try:
-            price = PriceRule(manifest.price)
+            price = form_price(form, manifest.price)
         except PriceError as error:
-            self.errors = {self._base_url: f"its price is invalid: {error}"}
-            return []
-        missing = price.fields - {spec.name for spec in form.fields}
-        if missing:
-            self.errors = {self._base_url: f"its price reads unknown fields: {sorted(missing)}"}
+            self.errors = {self._base_url: str(error)}
             return []
         self.errors = {}
         return [
@@ -50,9 +46,7 @@ class ServiceProvider:
                 form=form,
                 price=price,
                 steps=tuple(Step(name, weight) for name, weight in manifest.steps),
-                executor=HttpExecutor(
-                    self._http, f"{self._base_url}{JOBS_PATH}", self._executor_token
-                ),
+                executor=HttpExecutor(self._http, f"{self._base_url}{JOBS_PATH}", self._token),
             )
         ]
 
@@ -60,7 +54,7 @@ class ServiceProvider:
         try:
             response = await self._http.get(
                 f"{self._base_url}{MANIFEST_PATH}",
-                headers={"X-API-Key": self._executor_token},
+                headers={"X-API-Key": self._token},
                 timeout=MANIFEST_TIMEOUT_SECONDS,
             )
             response.raise_for_status()

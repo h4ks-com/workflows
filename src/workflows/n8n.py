@@ -6,7 +6,7 @@ from typing import Literal
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, ValidationError
 
-from workflows.catalog import HttpExecutor, JobType, ProviderError, Step
+from workflows.catalog import HttpExecutor, JobType, ProviderError, Step, form_price
 from workflows.db import JsonObject
 from workflows.forms import FieldKind, FieldSpec, Form, ValueType
 from workflows.pricing import PriceError, PriceRule
@@ -309,10 +309,7 @@ class N8nProvider:
         title = form_node.parameters.get("formTitle")
         description = form_node.parameters.get("formDescription")
         form = _form(name, form_node, manifest)
-        price = PriceRule(manifest.price)
-        missing = price.fields - {spec.name for spec in form.fields}
-        if missing:
-            raise N8nWorkflowError(f"its price reads fields the form lacks: {sorted(missing)}")
+        price = form_price(form, manifest.price)
         job_type = JobType(
             name=name,
             title=title if isinstance(title, str) and title else name,

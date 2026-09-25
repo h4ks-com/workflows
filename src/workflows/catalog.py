@@ -8,7 +8,7 @@ import httpx
 
 from workflows.db import JsonObject
 from workflows.forms import Form
-from workflows.pricing import PriceRule
+from workflows.pricing import PriceError, PriceRule
 from workflows.probe import Probe, Prober
 
 logger = logging.getLogger(__name__)
@@ -112,6 +112,14 @@ class JobType:
         probe = await prober.info(media_url) if isinstance(media_url, str) else None
         credits = self.price.evaluate(params, probe)
         return Quote(credits, credits, probe)
+
+
+def form_price(form: Form, expression: str) -> PriceRule:
+    price = PriceRule(expression)
+    missing = price.fields - {spec.name for spec in form.fields}
+    if missing:
+        raise PriceError(f"its price reads fields the form lacks: {sorted(missing)}")
+    return price
 
 
 def retired_type(name: str) -> JobType:
