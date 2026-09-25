@@ -536,6 +536,24 @@ def test_a_3d_result_opens_in_the_viewer_with_its_picture_as_thumbnail(
     assert '<img class="thumb" src="https://bucket.example/p.png"' in home
 
 
+def test_a_video_result_plays_on_the_job_page(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    job = queue_job(session, services, make_user(session, "alice"))
+    start(job)
+    video: JsonObject = {
+        "url": "https://bucket.example/k.mp4",
+        "name": "karaoke.mp4",
+        "mime": "video/mp4",
+    }
+    succeed(session, job, {"files": [video]})
+    session.commit()
+
+    panel = client.get(f"/partials/jobs/{job.id}").text
+
+    assert '<video class="shot" src="https://bucket.example/k.mp4" controls' in panel
+
+
 def test_submit_page_prefills_from_an_earlier_job(
     client: TestClient, session: Session, services: Services
 ) -> None:

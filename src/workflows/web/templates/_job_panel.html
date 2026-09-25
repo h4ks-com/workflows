@@ -57,6 +57,7 @@
     {% for file in files %}
     {% if file.url is playable %}
     {% if file.mime.startswith('image') %}<a href="{{ file.url }}"><img class="shot" src="{{ file.url }}" alt="{{ file.name }}"></a>{% endif %}
+    {% if file.mime.startswith('video/') %}<video class="shot" src="{{ file.url }}" controls playsinline preload="metadata"></video>{% endif %}
     {% if file.mime is model %}<model-viewer class="model" src="{{ file.url }}" alt="{{ file.name }}" camera-controls auto-rotate shadow-intensity="1" touch-action="pan-y"></model-viewer>{% endif %}
     <div class="res tile">
       {% if file.mime is listenable %}
