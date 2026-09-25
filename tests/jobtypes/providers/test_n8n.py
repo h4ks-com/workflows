@@ -255,7 +255,9 @@ async def test_discover_reads_the_tagged_workflows_into_job_types() -> None:
 @respx.mock
 async def test_discover_follows_the_cursor() -> None:
     second = copy.deepcopy(with_manifest({"position": 9}))
-    node(second, "n8n-nodes-base.webhook")["parameters"]["path"] = "workflows-image-two"
+    webhook = node(second, "n8n-nodes-base.webhook")["parameters"]
+    assert isinstance(webhook, dict)
+    webhook["path"] = "workflows-image-two"
     respx.get(LIST_URL).mock(
         side_effect=[
             httpx.Response(200, json={"data": [IMAGE_WORKFLOW], "nextCursor": "next"}),
