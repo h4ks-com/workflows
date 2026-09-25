@@ -32,8 +32,6 @@
 <div class="notice">cancelled. the credits were refunded.</div>
 {% elif detail.status == 'failed' %}
 <div class="notice warn">failed: {{ detail.error }}, credits refunded.</div>
-{% elif detail.removed_at %}
-<div class="notice">removed by an admin.</div>
 {% endif %}
 
 <div class="grid-2">
@@ -69,8 +67,10 @@
     </div>
     {% endif %}
     {% else %}
-    {% if detail.status != 'succeeded' or detail.removed_at %}
-    <div class="res" style="background:var(--bg)"><button class="play" type="button" disabled style="opacity:.4">▶</button><div class="meta"><span class="t muted">{{ 'removed by an admin' if detail.removed_at else 'your result shows up here when the job is done' }}</span></div></div>
+    {% if detail.removed_at %}
+    <p class="muted">removed by an admin.</p>
+    {% elif detail.status in ('awaiting_confirmation', 'queued', 'running') %}
+    <p class="muted">the result shows up here when the job is done.</p>
     {% endif %}
     {% endfor %}
     {% for link in (detail.result.links if detail.result and detail.result.links else []) if link.url is playable %}
