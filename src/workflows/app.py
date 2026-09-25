@@ -13,25 +13,27 @@ from starlette.datastructures import Headers
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from workflows import account, admin, api, clients, stream, web
-from workflows.beans import BeansPoller
-from workflows.builtin import builtin_provider
-from workflows.bus import EventBus
-from workflows.catalog import Catalog, Provider
+from workflows.accounts import account
+from workflows.accounts.beans import BeansPoller
+from workflows.accounts.ledger import InsufficientCreditsError
+from workflows.accounts.login import build_oauth
+from workflows.accounts.login import router as login_router
+from workflows.api import admin, clients, routes, stream
+from workflows.api.mcp import build_mcp
 from workflows.db import connect, session_factory
-from workflows.jobs import InvalidEventError, JobError
-from workflows.ledger import InsufficientCreditsError
-from workflows.login import build_oauth
-from workflows.login import router as login_router
-from workflows.mcp import build_mcp
-from workflows.n8n import N8nProvider
-from workflows.probe import PROBE_LIMITS, ProbeError, Prober, YtdlProber
-from workflows.services import ServiceProvider
+from workflows.jobtypes.catalog import Catalog, Provider
+from workflows.jobtypes.probe import PROBE_LIMITS, ProbeError, Prober, YtdlProber
+from workflows.jobtypes.providers.builtin import builtin_provider
+from workflows.jobtypes.providers.n8n import N8nProvider
+from workflows.jobtypes.providers.services import ServiceProvider
+from workflows.runs.bus import EventBus
+from workflows.runs.jobs import InvalidEventError, JobError
+from workflows.runs.webhooks import WEBHOOK_TIMEOUT_SECONDS, WebhookNotifier
+from workflows.runs.worker import QueueWorker
 from workflows.settings import Settings, load_settings
 from workflows.state import AppServices, Services
 from workflows.storage import build_storage
-from workflows.webhooks import WEBHOOK_TIMEOUT_SECONDS, WebhookNotifier
-from workflows.worker import QueueWorker
+from workflows.web import pages
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +43,7 @@ ERROR_STATUS = {
     InsufficientCreditsError: 402,
     ProbeError: 502,
 }
-STATIC_DIR = Path(__file__).parent / "static"
+STATIC_DIR = Path(__file__).parent / "web" / "static"
 MAX_BODY_BYTES = 256 * 1024
 TOO_LARGE = "the request body is over 256 KB"
 SECURITY_HEADERS = {
@@ -117,14 +119,14 @@ def exit_when_dead(task: asyncio.Task[None]) -> None:
 
 
 def _register_routers(app: FastAPI) -> None:
-    app.include_router(api.router)
+    app.include_router(routes.router)
     app.include_router(account.router)
     app.include_router(clients.router)
     app.include_router(clients.pages_router)
     app.include_router(admin.router)
     app.include_router(login_router)
     app.include_router(stream.router)
-    app.include_router(web.router)
+    app.include_router(pages.router)
 
 
 def default_providers(settings: Settings, http: httpx.AsyncClient) -> list[Provider]:

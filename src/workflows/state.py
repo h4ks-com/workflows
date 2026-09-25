@@ -7,13 +7,13 @@ from authlib.integrations.starlette_client import OAuth
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session, sessionmaker
 
-from workflows.beans import BeansPoller
-from workflows.bus import EventBus
-from workflows.catalog import Catalog
-from workflows.probe import Prober
+from workflows.accounts.beans import BeansPoller
+from workflows.jobtypes.catalog import Catalog
+from workflows.jobtypes.probe import Prober
+from workflows.runs.bus import EventBus
+from workflows.runs.worker import QueueWorker
 from workflows.settings import Settings
 from workflows.storage import Storage
-from workflows.worker import QueueWorker
 
 
 @dataclass(frozen=True)
