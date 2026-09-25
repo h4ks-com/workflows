@@ -18,7 +18,7 @@
   <div class="field"{% if f.show_when %} data-show-when="{{ f.show_when|tojson|forceescape }}"{% endif %}>
     <label for="f-{{ f.name }}">{{ f.label }}{% if not f.required %} <small>(optional)</small>{% endif %}</label>
     {% if f.kind == "textarea" %}
-    <textarea id="f-{{ f.name }}" name="{{ f.name }}">{{ f.default or "" }}</textarea>
+    <textarea id="f-{{ f.name }}" name="{{ f.name }}"{{ " required" if f.required }}>{{ f.default or "" }}</textarea>
     {% elif f.kind == "select" %}
     <div class="seg" role="tablist">
       {% for opt in f.enum %}<button type="button" class="{{ 'on' if opt == f.default else '' }}" data-value="{{ opt }}">{{ opt }}</button>{% endfor %}
@@ -27,14 +27,14 @@
     {% elif f.kind == "checkbox" %}
     <label class="row" style="font:13px var(--mono);color:var(--mid)"><input type="checkbox" name="{{ f.name }}" style="width:auto" {% if f.default %}checked{% endif %}> {{ f.description }}</label>
     {% elif f.kind == "number" %}
-    <input id="f-{{ f.name }}" type="number" name="{{ f.name }}" value="{{ f.default }}" {% if f.minimum is not none %}min="{{ f.minimum|int }}"{% endif %} {% if f.maximum is not none %}max="{{ f.maximum|int }}"{% endif %}>
+    <input id="f-{{ f.name }}" type="number" name="{{ f.name }}" value="{{ f.default if f.default is not none else '' }}"{{ " required" if f.required }} {% if f.minimum is not none %}min="{{ f.minimum|int }}"{% endif %} {% if f.maximum is not none %}max="{{ f.maximum|int }}"{% endif %}>
     {% elif f.accept %}
     <div class="upload">
-      <input id="f-{{ f.name }}" type="url" name="{{ f.name }}" value="{{ f.default or '' }}" placeholder="paste a link or drop a file here">
+      <input id="f-{{ f.name }}" type="url" name="{{ f.name }}" value="{{ f.default or '' }}"{{ " required" if f.required }} placeholder="paste a link or drop a file here">
       <label class="btn ghost">upload<input type="file" accept="{{ f.accept }}" data-upload-for="f-{{ f.name }}" hidden></label>
     </div>
     {% else %}
-    <input id="f-{{ f.name }}" type="text" name="{{ f.name }}" value="{{ f.default or '' }}">
+    <input id="f-{{ f.name }}" type="text" name="{{ f.name }}" value="{{ f.default or '' }}"{{ " required" if f.required }}>
     {% endif %}
     {% if f.kind != "checkbox" and f.description %}<small>{{ f.description }}</small>{% endif %}
   </div>

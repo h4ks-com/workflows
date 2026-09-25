@@ -1,33 +1,11 @@
-from dataclasses import dataclass, field, replace
-
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from conftest import log_in, make_user, queue_job
+from conftest import MINIO_ENDPOINT, FakeStorage, log_in, make_user, queue_job, with_storage
 from workflows.db import JobEvent, JsonObject
 from workflows.runs.jobs import start, succeed
 from workflows.state import Services
-
-MINIO_ENDPOINT = "s3-api.t3ks.com"
-
-
-@dataclass
-class FakeStorage:
-    removed: list[tuple[str, str]] = field(default_factory=list)
-
-    async def remove(self, bucket: str, key: str) -> None:
-        self.removed.append((bucket, key))
-
-
-def with_storage(app: FastAPI, services: Services, storage: FakeStorage) -> None:
-    settings = replace(
-        services.settings,
-        minio_endpoint=MINIO_ENDPOINT,
-        minio_access_key="key",
-        minio_secret_key="secret",
-    )
-    app.state.services = replace(services, settings=settings, storage=storage)
 
 
 def test_admin_endpoints_require_admin(client: TestClient, session: Session) -> None:

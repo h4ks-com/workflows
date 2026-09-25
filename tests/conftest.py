@@ -2,7 +2,7 @@ import asyncio
 import json
 from base64 import b64encode
 from collections.abc import Iterator
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import httpx
@@ -34,6 +34,25 @@ SONG_EXECUTOR = "https://n8n.test/webhook/workflows-song"
 SONG_URL = "https://youtube.example/watch?v=song"
 FETCH_HEADERS = {"X-Requested-With": "fetch"}
 NO_EXECUTOR_YET = {"voice", "podcast", "image"}
+MINIO_ENDPOINT = "s3-api.t3ks.com"
+
+
+@dataclass
+class FakeStorage:
+    removed: list[tuple[str, str]] = field(default_factory=list)
+
+    async def remove(self, bucket: str, key: str) -> None:
+        self.removed.append((bucket, key))
+
+
+def with_storage(app: FastAPI, services: Services, storage: FakeStorage) -> None:
+    settings = replace(
+        services.settings,
+        minio_endpoint=MINIO_ENDPOINT,
+        minio_access_key="key",
+        minio_secret_key="secret",
+    )
+    app.state.services = replace(services, settings=settings, storage=storage)
 
 
 def limited_provider(http: httpx.AsyncClient) -> StaticProvider:

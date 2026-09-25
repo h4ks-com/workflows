@@ -3,9 +3,17 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from test_admin import MINIO_ENDPOINT, FakeStorage, with_storage
 
-from conftest import FakeProber, log_in, make_job, make_user, queue_job
+from conftest import (
+    MINIO_ENDPOINT,
+    FakeProber,
+    FakeStorage,
+    log_in,
+    make_job,
+    make_user,
+    queue_job,
+    with_storage,
+)
 from workflows.db import ExternalIdentity, JsonObject
 from workflows.runs.jobs import LogEvent, StepEvent, apply_event, start, succeed
 from workflows.state import Services
@@ -95,7 +103,7 @@ def test_submit_quote_preview_shows_price(client: TestClient) -> None:
 def test_submit_quote_preview_invalid_params_shows_hint(client: TestClient) -> None:
     response = client.post("/submit/song/quote", data={"seconds": "150"})
 
-    assert "fill in prompt to see the cost" in response.text
+    assert "fill in prompt" in response.text
 
 
 def test_submit_quote_preview_names_the_invalid_field(client: TestClient) -> None:
@@ -147,7 +155,7 @@ def test_submit_invalid_params_rerenders_form(client: TestClient, session: Sessi
     )
 
     assert response.status_code == 422
-    assert "check the form" in response.text
+    assert "fill in prompt" in response.text
 
 
 def test_submit_insufficient_credits_shows_topup_hint(
@@ -373,7 +381,7 @@ def test_submit_with_non_numeric_input_rerenders_form(client: TestClient, sessio
     quote = client.post("/submit/song/quote", data={"prompt": "cats", "seconds": "abc"})
 
     assert response.status_code == 422
-    assert "check the form" in response.text
+    assert "check length (seconds): input should be a valid integer" in response.text
     assert "check length (seconds): input should be a valid integer" in quote.text
 
 
@@ -510,6 +518,7 @@ def test_submit_page_prefills_from_an_earlier_job(
     assert "a song about cats</textarea>" in response.text
     assert 'hx-trigger="load, ' in response.text
     assert 'hx-trigger="load, ' not in fresh.text
+    assert 'name="prompt" required>' in fresh.text
 
 
 def test_submit_page_ignores_a_job_of_another_type(

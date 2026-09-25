@@ -181,7 +181,7 @@ def form_error(job_type: JobType, detail: JsonValue) -> str:
         labels.get(str(location[-1])) if isinstance(location, list | tuple) and location else None
     )
     if first.get("type") == "missing":
-        return f"fill in {field} to see the cost" if field else FORM_INVALID
+        return f"fill in {field}" if field else FORM_INVALID
     message = str(first.get("msg", "")).removeprefix("Value error, ").lower()
     return f"check {field}: {message}" if field else f"check the form: {message}"
 
@@ -204,7 +204,8 @@ async def _create_and_redirect(
     except HTTPException as error:
         if error.status_code != status.HTTP_422_UNPROCESSABLE_CONTENT:
             raise
-        return _resubmit_page(page, job_type, FORM_INVALID, request.params, 422)
+        error_text = form_error(job_type, error.detail)
+        return _resubmit_page(page, job_type, error_text, request.params, 422)
     except ProbeError:
         return _resubmit_page(page, job_type, PROBE_FAILED, request.params, 502)
     job = create_job(page.session, job_type, params, priced, user)

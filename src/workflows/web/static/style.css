@@ -101,7 +101,7 @@ a.q:hover { background: var(--panel-2); }
 .grid-2 > *, .form-grid > *, .panel > * { min-width: 0; }
 .grid-2 { display: grid; grid-template-columns: 1.35fr 1fr; gap: 22px; align-items: start; }
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
-.type { background: var(--panel); border: 1px solid var(--border); padding: 16px; display: grid; gap: 10px; text-decoration: none; color: var(--text); }
+.type { background: var(--panel); border: 1px solid var(--border); padding: 16px; display: grid; align-content: start; gap: 10px; text-decoration: none; color: var(--text); }
 .type:hover { border-color: var(--accent); }
 .type.soon { opacity: .55; pointer-events: none; }
 .type .glyph { font: 600 20px var(--mono); color: var(--accent); }
