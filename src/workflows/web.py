@@ -128,6 +128,13 @@ def _submit_context(
     }
 
 
+def _resubmit_page(
+    page: Page, job_type: JobType, error: str, typed: JsonObject, status_code: int
+) -> Response:
+    context = _submit_context(page, job_type, error, prefill=typed)
+    return render(page, "submit.html", context, status_code)
+
+
 @router.get("/submit/{type_name}")
 async def submit_page(
     type_name: str, page: PageCtx, from_job: Annotated[int | None, Query(alias="from")] = None
@@ -196,15 +203,15 @@ async def _create_and_redirect(
     except HTTPException as error:
         if error.status_code != status.HTTP_422_UNPROCESSABLE_CONTENT:
             raise
-        return render(page, "submit.html", _submit_context(page, job_type, FORM_INVALID), 422)
+        return _resubmit_page(page, job_type, FORM_INVALID, request.params, 422)
     except ProbeError:
-        return render(page, "submit.html", _submit_context(page, job_type, PROBE_FAILED), 502)
+        return _resubmit_page(page, job_type, PROBE_FAILED, request.params, 502)
     job = create_job(page.session, job_type, params, priced, user)
     try:
         enqueue(page.session, job, user)
     except InsufficientCreditsError:
         page.session.rollback()
-        return render(page, "submit.html", _submit_context(page, job_type, TOPUP_HINT), 402)
+        return _resubmit_page(page, job_type, TOPUP_HINT, request.params, 402)
     page.session.commit()
     announce(page.services.bus, job)
     return RedirectResponse(f"/jobs/{job.id}", status_code=303)

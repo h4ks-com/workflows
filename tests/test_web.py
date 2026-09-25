@@ -390,6 +390,7 @@ def test_submit_shows_probe_failures(client: TestClient, session: Session) -> No
     assert "we could not read it" in quote.text
     assert response.status_code == 502
     assert "we could not read it" in response.text
+    assert f'value="{unknown_url}"' in response.text
 
 
 def test_submit_page_uses_textareas_for_long_text(client: TestClient) -> None:
