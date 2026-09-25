@@ -344,6 +344,7 @@ async def test_notify_posts_every_status_to_every_subscription(
         "run_url": run_url,
         "result_urls": result_urls,
         "error": "the executor crashed" if status == JobStatus.FAILED else None,
+        "has_webhook": False,
     }
 
     await notifier.notify(job.id, status)
@@ -352,6 +353,20 @@ async def test_notify_posts_every_status_to_every_subscription(
         request = route.calls.last.request
         assert json.loads(request.content) == expected_payload
         assert request.headers["X-Webhook-Signature"] == expected_signature(expected_payload)
+
+
+@respx.mock
+async def test_subscriptions_learn_which_jobs_have_their_own_webhook(
+    client: TestClient, session: Session, services: Services, notifier: WebhookNotifier
+) -> None:
+    respx.post(HOOK_URL).respond(204)
+    route = respx.post(SUB_URLS[0]).respond(204)
+    subscribe(client, SUB_URLS[0])
+    job = hooked_job(session, services, JobStatus.SUCCEEDED)
+
+    await notifier.notify(job.id, JobStatus.SUCCEEDED)
+
+    assert json.loads(route.calls.last.request.content)["has_webhook"] is True
 
 
 @respx.mock

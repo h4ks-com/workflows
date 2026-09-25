@@ -108,6 +108,7 @@ def job_event_payload(
         "run_url": run_url,
         "result_urls": list(urls),
         "error": job.error if status == JobStatus.FAILED else None,
+        "has_webhook": job.webhook is not None,
     }
 
 
