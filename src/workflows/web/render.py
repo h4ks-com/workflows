@@ -168,6 +168,10 @@ def is_listenable(mime: str) -> bool:
     return mime.startswith("audio/") and mime != "audio/midi"
 
 
+def is_model(mime: str) -> bool:
+    return mime == "model/gltf-binary"
+
+
 STATUS_LABELS = {
     JobStatus.AWAITING_CONFIRMATION: "waiting for confirmation",
     JobStatus.QUEUED: "in line",
@@ -237,6 +241,7 @@ def credits(amount: int) -> str:
 
 templates.env.tests["playable"] = is_playable_url
 templates.env.tests["listenable"] = is_listenable
+templates.env.tests["model"] = is_model
 templates.env.filters["credits"] = credits
 templates.env.filters["status_label"] = status_label
 templates.env.filters["ledger_label"] = ledger_label

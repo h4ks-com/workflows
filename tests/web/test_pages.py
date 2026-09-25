@@ -511,6 +511,31 @@ def test_a_midi_result_opens_its_player_link(
     assert 'href="https://player.example/?a"' in home
 
 
+def test_a_3d_result_opens_in_the_viewer_with_its_picture_as_thumbnail(
+    client: TestClient, session: Session, services: Services
+) -> None:
+    job = queue_job(session, services, make_user(session, "alice"))
+    start(job)
+    picture: JsonObject = {
+        "url": "https://bucket.example/p.png",
+        "name": "picture",
+        "mime": "image/png",
+    }
+    model: JsonObject = {
+        "url": "https://bucket.example/m.glb",
+        "name": "model.glb",
+        "mime": "model/gltf-binary",
+    }
+    succeed(session, job, {"files": [picture, model]})
+    session.commit()
+
+    panel = client.get(f"/partials/jobs/{job.id}").text
+    home = client.get("/").text
+
+    assert '<model-viewer class="model" src="https://bucket.example/m.glb"' in panel
+    assert '<img class="thumb" src="https://bucket.example/p.png"' in home
+
+
 def test_submit_page_prefills_from_an_earlier_job(
     client: TestClient, session: Session, services: Services
 ) -> None:

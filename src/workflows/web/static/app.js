@@ -186,8 +186,22 @@
     ["snapshot", "status"].forEach((kind) => source.addEventListener(kind, refreshAndCloseWhenDone));
   }
 
+  // The 3D viewer is a megabyte, so we load it only once a model shows up, including one a live update swaps in.
+  let viewerRequested = false;
+  function loadModelViewer() {
+    if (viewerRequested || !document.querySelector("model-viewer")) return;
+    viewerRequested = true;
+    self.ModelViewerElement = { meshoptDecoderLocation: "/static/meshopt_decoder-1.2.js" };
+    const script = document.createElement("script");
+    script.type = "module";
+    script.src = "/static/model-viewer-4.3.1.min.js";
+    document.head.appendChild(script);
+  }
+  document.addEventListener("htmx:afterSwap", loadModelViewer);
+
   document.addEventListener("DOMContentLoaded", () => {
     connectQueueStream();
     connectJobStream();
+    loadModelViewer();
   });
 })();

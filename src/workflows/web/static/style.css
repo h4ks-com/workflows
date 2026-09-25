@@ -119,6 +119,7 @@ a.play { display: grid; place-items: center; text-decoration: none; }
 .tile > a, .tile > button { position: relative; z-index: 1; }
 .res > .meta:first-child { grid-column: 1 / -1; }
 .shot { display: block; max-width: 100%; border: 1px solid var(--border); }
+.model { display: block; width: 100%; height: 360px; background: var(--bg); border: 1px solid var(--border); }
 .thumb { display: block; width: 40px; height: 40px; object-fit: cover; border: 1px solid var(--border); }
 .wave { display: block; width: 100%; height: 36px; }
 .res .meta .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
