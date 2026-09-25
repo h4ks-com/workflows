@@ -123,6 +123,7 @@ def _submit_context(
         "job_type": type_view(job_type),
         "fields": fields,
         "quote": None,
+        "prefilled": bool(prefill),
         "error": error,
         "csrf_token": csrf_token(page.request),
     }

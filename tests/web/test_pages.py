@@ -473,6 +473,7 @@ def test_results_play_audio_and_link_other_files(
     assert 'href="https://bucket.example/clip.mp4"' in panel
     assert 'data-src="https://bucket.example/clip.mp4"' not in home
     assert 'href="https://bucket.example/clip.mp4"' in home
+    assert ">just now</time>" in home
 
 
 def test_a_midi_result_opens_its_player_link(
@@ -503,9 +504,12 @@ def test_submit_page_prefills_from_an_earlier_job(
     job = make_job(session, services, None)
 
     response = client.get(f"/submit/song?from={job.id}")
+    fresh = client.get("/submit/song")
 
     assert response.status_code == 200
     assert "a song about cats</textarea>" in response.text
+    assert 'hx-trigger="load, ' in response.text
+    assert 'hx-trigger="load, ' not in fresh.text
 
 
 def test_submit_page_ignores_a_job_of_another_type(

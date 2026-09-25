@@ -1,5 +1,5 @@
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -179,23 +179,37 @@ def ledger_label(kind: str) -> str:
 MINUTE_SECONDS = 60
 HOUR_SECONDS = 3600
 DAY_SECONDS = 86400
+WEEK_SECONDS = 7 * DAY_SECONDS
+MONTH_SECONDS = 30 * DAY_SECONDS
 
 
 def short_time(value: datetime | None) -> str:
     return value.strftime("%b %d %H:%M") if value else "never"
 
 
-def relative_time(value: datetime | None) -> str:
+def _ago(count: int, unit: str) -> str:
+    return f"{count} {unit} ago" if count == 1 else f"{count} {unit}s ago"
+
+
+AGE_WORDS: tuple[tuple[int, Callable[[int], str]], ...] = (
+    (MINUTE_SECONDS, lambda _: "just now"),
+    (HOUR_SECONDS, lambda seconds: f"{seconds // MINUTE_SECONDS} min ago"),
+    (DAY_SECONDS, lambda seconds: _ago(seconds // HOUR_SECONDS, "hour")),
+    (2 * DAY_SECONDS, lambda _: "yesterday"),
+    (WEEK_SECONDS, lambda seconds: _ago(seconds // DAY_SECONDS, "day")),
+    (MONTH_SECONDS, lambda seconds: _ago(seconds // WEEK_SECONDS, "week")),
+)
+
+
+def relative_time(value: datetime | None, now: datetime | None = None) -> str:
     if value is None:
         return "never"
-    seconds = (utcnow() - value).total_seconds()
-    if seconds < MINUTE_SECONDS:
-        return "just now"
-    if seconds < HOUR_SECONDS:
-        return f"{int(seconds // MINUTE_SECONDS)}m ago"
-    if seconds < DAY_SECONDS:
-        return f"{int(seconds // HOUR_SECONDS)}h ago"
-    return short_time(value)
+    now = now or utcnow()
+    seconds = int((now - value).total_seconds())
+    for limit, words in AGE_WORDS:
+        if seconds < limit:
+            return words(seconds)
+    return value.strftime("%b %-d" if value.year == now.year else "%b %-d, %Y")
 
 
 def credits(amount: int) -> str:
