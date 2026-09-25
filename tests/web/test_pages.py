@@ -1,10 +1,16 @@
+import asyncio
+from dataclasses import replace
+
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from conftest import EXECUTOR_TOKEN
 from conftest import MINIO_ENDPOINT
+from conftest import N8N_URL
 from conftest import FakeProber
 from conftest import FakeStorage
 from conftest import log_in
@@ -12,13 +18,19 @@ from conftest import make_job
 from conftest import make_user
 from conftest import queue_job
 from conftest import with_storage
+from workflows.app import create_app
 from workflows.db import ExternalIdentity
 from workflows.db import JsonObject
+from workflows.jobtypes.catalog import StaticProvider
+from workflows.jobtypes.forms import FieldSpec
+from workflows.jobtypes.forms import Form
+from workflows.jobtypes.providers.builtin import builtin_job_types
 from workflows.runs.jobs import LogEvent
 from workflows.runs.jobs import StepEvent
 from workflows.runs.jobs import apply_event
 from workflows.runs.jobs import start
 from workflows.runs.jobs import succeed
+from workflows.settings import Settings
 from workflows.state import Services
 
 
@@ -81,6 +93,28 @@ def test_submit_page_renders_fields_for_available_type(client: TestClient) -> No
     assert response.status_code == 200
     assert 'name="prompt"' in response.text
     assert 'name="seconds"' in response.text
+
+
+def test_select_options_show_their_previews(settings: Settings, prober: FakeProber) -> None:
+    http = httpx.AsyncClient()
+    song = next(t for t in builtin_job_types(http, N8N_URL, EXECUTOR_TOKEN) if t.name == "song")
+    look = FieldSpec(
+        name="look",
+        label="Look",
+        description="",
+        kind="select",
+        required=False,
+        enum=("neon", "mono"),
+        previews={"neon": "https://s3.example/neon.webp"},
+    )
+    styled = replace(song, form=Form("Song", (look,)))
+    app = create_app(settings, prober, [StaticProvider([styled])])
+    asyncio.run(app.state.services.catalog.refresh())
+
+    page = TestClient(app, base_url="https://testserver").get("/submit/song").text
+
+    assert '<img src="https://s3.example/neon.webp" alt="" loading="lazy">neon</button>' in page
+    assert 'data-value="mono">mono</button>' in page
 
 
 def test_submit_page_shows_coming_soon_for_unavailable_type(client: TestClient) -> None:

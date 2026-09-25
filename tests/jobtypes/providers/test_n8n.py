@@ -11,6 +11,7 @@ from workflows.db import JsonObject
 from workflows.jobtypes.catalog import Catalog
 from workflows.jobtypes.catalog import HttpExecutor
 from workflows.jobtypes.catalog import ProviderError
+from workflows.jobtypes.forms import form_from_schema
 from workflows.jobtypes.providers.builtin import builtin_job_types
 from workflows.jobtypes.providers.n8n import N8nProvider
 
@@ -129,6 +130,19 @@ async def test_a_note_with_only_a_price_uses_defaults() -> None:
 
 
 @respx.mock
+async def test_option_previews_reach_the_form_and_its_schema() -> None:
+    previews = {"square": "https://media.example/square.webp"}
+    workflow = with_manifest({"fields": {"shape": {"previews": previews}}})
+    respx.get(LIST_URL).respond(json={"data": [workflow], "nextCursor": None})
+
+    [image] = await provider().discover()
+
+    shape = next(spec for spec in image.form.fields if spec.name == "shape")
+    assert shape.previews == previews
+    assert form_from_schema(image.form.json_schema()).fields[3].previews == previews
+
+
+@respx.mock
 async def test_a_constant_price_reads_as_credits() -> None:
     minimal = with_manifest({"price": "40"}, replace=True)
     respx.get(LIST_URL).respond(json={"data": [minimal], "nextCursor": None})
@@ -234,6 +248,7 @@ async def test_discover_follows_the_cursor() -> None:
         ({"price": "open('x')"}, "only call allowed"),
         ({"price": "[40]"}, "not allowed"),
         ({"fields": {"nope": {"description": "x"}}}, "nope"),
+        ({"fields": {"shape": {"previews": {"round": "https://x.example/r.png"}}}}, "round"),
         ({"steps": []}, "settings are invalid"),
         ({"surprise": True}, "settings are invalid"),
     ],

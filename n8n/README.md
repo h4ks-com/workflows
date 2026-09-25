@@ -60,7 +60,8 @@ Fuller ones, from the image job:
 - `steps`: the step names the executor reports, in order, each with a weight for the progress bar. Defaults to one step called `run`.
 - `position`: the order on the site, lowest first. Defaults to 0.
 - `name`: the job type id in URLs and the API, lowercase letters, digits and dashes. Defaults to the webhook path without its `workflows-` prefix.
-- `fields`: per-field settings the n8n form cannot hold: `type`, `minimum`, `maximum`, `min_length`, `max_length`, `show_when`, and `description` to override the help text. A field with `show_when` shows only when the other fields hold those values, and the service rejects it otherwise.
+- `fields`: per-field settings the n8n form cannot hold: `type`, `minimum`, `maximum`, `min_length`, `max_length`, `show_when`, `previews`, and `description` to override the help text. A field with `show_when` shows only when the other fields hold those values, and the service rejects it otherwise.
+- `previews`: for a dropdown, a picture per option, shown on the option's button so people see what they pick, for example `"look": {"previews": {"neon": "https://media.example.com/previews/karaoke/look-neon.webp"}}`. Keys must be options of the field. Host the pictures in the same public bucket as the results, since the site only loads images from there; an animated WebP shows motion.
 
 ## What the executor does
 
@@ -74,7 +75,7 @@ The workflow then posts events to `callback_url` with `Authorization: Bearer <ca
 
 - `{"kind": "step", "step": "generate"}` when a step starts, and optionally `done` and `total` for progress within it. Send the first step right away: a job with no event within 120 seconds fails.
 - `{"kind": "log", "message": "..."}` for the activity log.
-- `{"kind": "result", "title": "...", "files": [{"url": "https://...", "name": "image.png", "mime": "image/png"}], "metadata_url": "https://..."}` to finish. Store files in a public bucket. An optional `links` list of `{"label": "...", "url": "https://..."}` adds pages that open the result, such as a player.
+- `{"kind": "result", "title": "...", "files": [{"url": "https://...", "name": "image.png", "mime": "image/png"}], "metadata_url": "https://..."}` to finish. Store files in a public bucket. The job page shows images, plays audio and video, and opens `model/gltf-binary` files in a 3D viewer; every file is also a download. An optional `links` list of `{"label": "...", "url": "https://..."}` adds pages that open the result, such as a player.
 - `{"kind": "error", "message": "..."}` to fail the job and refund the user.
 
 Give the result and error calls "retry on fail" (5 tries, 5 seconds apart) so a service restart does not lose a finished job. Text is trimmed to one line; titles and names hold 200 characters and messages 500.

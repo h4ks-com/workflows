@@ -21,6 +21,7 @@ from workflows.db import JsonObject
 TEXTAREA = "textarea"
 UPLOAD = "x-upload"
 SHOW_WHEN = "x-show-when"
+PREVIEWS = "x-previews"
 
 type FieldKind = Literal["select", "checkbox", "number", "textarea", "text"]
 type ValueType = Literal["string", "integer", "number", "boolean", "url"]
@@ -52,6 +53,7 @@ class FieldSpec:
     default: JsonValue = None
     accept: str | None = None
     show_when: JsonObject | None = None
+    previews: dict[str, str] | None = None
 
 
 class FormParams(BaseModel):
@@ -97,6 +99,8 @@ def _schema_extra(spec: FieldSpec) -> JsonDict:
         extra[UPLOAD] = spec.accept
     if spec.show_when is not None:
         extra[SHOW_WHEN] = spec.show_when
+    if spec.previews is not None:
+        extra[PREVIEWS] = dict(spec.previews)
     return extra
 
 
@@ -200,6 +204,12 @@ def _kind(prop: JsonObject, value_type: ValueType, enum: tuple[str, ...] | None)
     return "text"
 
 
+def _previews(value: JsonValue) -> dict[str, str] | None:
+    if not isinstance(value, dict):
+        return None
+    return {str(option): str(url) for option, url in value.items()}
+
+
 def _field_from_schema(name: str, prop: JsonObject, required: bool) -> FieldSpec:
     value_type = _value_type(prop)
     enum = _enum(prop)
@@ -219,11 +229,12 @@ def _field_from_schema(name: str, prop: JsonObject, required: bool) -> FieldSpec
         default=prop.get("default"),
         accept=str(prop[UPLOAD]) if UPLOAD in prop else None,
         show_when=_as_object(prop[SHOW_WHEN]) if SHOW_WHEN in prop else None,
+        previews=_previews(prop.get(PREVIEWS)),
     )
 
 
 def form_from_schema(schema: JsonObject) -> Form:
-    """Build a form from a JSON schema, reading the `x-upload` and `x-show-when` extensions."""
+    """Build a form from a JSON schema with its `x-upload`, `x-show-when` and `x-previews`."""
     required = schema.get("required")
     required_names = set(required) if isinstance(required, list) else set()
     properties = _as_object(schema.get("properties"))

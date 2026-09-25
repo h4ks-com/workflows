@@ -7,6 +7,7 @@ import httpx
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from pydantic import Field
+from pydantic import HttpUrl
 from pydantic import JsonValue
 from pydantic import ValidationError
 
@@ -98,6 +99,7 @@ class FieldOverride(BaseModel):
     min_length: int | None = None
     max_length: int | None = None
     show_when: JsonObject | None = None
+    previews: dict[str, HttpUrl] | None = None
 
 
 class Manifest(BaseModel):
@@ -193,6 +195,19 @@ def _description(element: FormElement, override: FieldOverride, help_text: str |
     return override.description or help_text or element.placeholder or option_text or ""
 
 
+def _previews(
+    element: FormElement, override: FieldOverride, options: tuple[str, ...]
+) -> dict[str, str] | None:
+    if override.previews is None:
+        return None
+    unknown = set(override.previews) - set(options)
+    if unknown:
+        raise N8nWorkflowError(
+            f"the field {element.fieldName} has previews for unknown options {sorted(unknown)}"
+        )
+    return {option: str(url) for option, url in override.previews.items()}
+
+
 def _field(element: FormElement, override: FieldOverride, help_text: str | None) -> FieldSpec:
     if not element.fieldName:
         raise N8nWorkflowError(f"the field {element.fieldLabel} has no field name")
@@ -216,6 +231,7 @@ def _field(element: FormElement, override: FieldOverride, help_text: str | None)
         default=_default(element, value_type),
         accept=(element.acceptFileTypes or "*/*") if value_type == "url" else None,
         show_when=override.show_when,
+        previews=_previews(element, override, options),
     )
 
 

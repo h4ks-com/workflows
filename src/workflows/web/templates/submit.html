@@ -20,8 +20,8 @@
     {% if f.kind == "textarea" %}
     <textarea id="f-{{ f.name }}" name="{{ f.name }}"{{ " required" if f.required }}>{{ f.default or "" }}</textarea>
     {% elif f.kind == "select" %}
-    <div class="seg" role="tablist">
-      {% for opt in f.enum %}<button type="button" class="{{ 'on' if opt == f.default else '' }}" data-value="{{ opt }}">{{ opt }}</button>{% endfor %}
+    <div class="seg{{ ' previews' if f.previews }}" role="tablist">
+      {% for opt in f.enum %}<button type="button" class="{{ 'on' if opt == f.default else '' }}" data-value="{{ opt }}">{% if f.previews and opt in f.previews %}<img src="{{ f.previews[opt] }}" alt="" loading="lazy">{% endif %}{{ opt }}</button>{% endfor %}
     </div>
     <input type="hidden" name="{{ f.name }}" value="{{ f.default or f.enum[0] }}">
     {% elif f.kind == "checkbox" %}
