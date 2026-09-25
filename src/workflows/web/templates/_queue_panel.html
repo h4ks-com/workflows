@@ -35,7 +35,7 @@
         <span class="num muted eta">~{{ (slot.starts_in_seconds // 60) if slot.starts_in_seconds is not none else '?' }} min</span>
       </a>
       {% else %}
-      <p class="muted">nothing in line.</p>
+      <p class="muted">nothing in line. <a href="#create">create a job</a>.</p>
       {% endfor %}
     </div>
   </div>
@@ -59,7 +59,7 @@
     {% for job in recent %}
     {% include "_result_row.html" %}
     {% else %}
-    <p class="muted">nothing finished yet.</p>
+    <p class="muted">nothing finished yet. <a href="#create">create a job</a>.</p>
     {% endfor %}
   </div>
 </div>
