@@ -2,13 +2,20 @@ import json
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter
-from sse_starlette import EventSourceResponse, ServerSentEvent
+from sse_starlette import EventSourceResponse
+from sse_starlette import ServerSentEvent
 
-from workflows.api.views import get_job_or_404, job_detail_view, queue_view
+from workflows.api.views import get_job_or_404
+from workflows.api.views import job_detail_view
+from workflows.api.views import queue_view
 from workflows.db import JsonObject
-from workflows.runs.bus import QUEUE_TOPIC, BusEvent, job_topic
-from workflows.runs.jobs import STATUS_EVENT, TERMINAL_STATUSES
-from workflows.state import AppServices, Services
+from workflows.runs.bus import QUEUE_TOPIC
+from workflows.runs.bus import BusEvent
+from workflows.runs.bus import job_topic
+from workflows.runs.jobs import STATUS_EVENT
+from workflows.runs.jobs import TERMINAL_STATUSES
+from workflows.state import AppServices
+from workflows.state import Services
 
 router = APIRouter(prefix="/api")
 

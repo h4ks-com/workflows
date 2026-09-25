@@ -1,8 +1,14 @@
 from pathlib import Path
 
-from sqlalchemy import Column, Integer, create_engine, inspect, text
+from sqlalchemy import Column
+from sqlalchemy import Integer
+from sqlalchemy import create_engine
+from sqlalchemy import inspect
+from sqlalchemy import text
 
-from workflows.db import _add_column_sql, _add_missing_columns, connect
+from workflows.db import _add_column_sql
+from workflows.db import _add_missing_columns
+from workflows.db import connect
 
 
 def test_add_column_sql_keeps_the_server_default() -> None:

@@ -8,7 +8,9 @@ import respx
 from pydantic import JsonValue
 
 from workflows.db import JsonObject
-from workflows.jobtypes.catalog import Catalog, HttpExecutor, ProviderError
+from workflows.jobtypes.catalog import Catalog
+from workflows.jobtypes.catalog import HttpExecutor
+from workflows.jobtypes.catalog import ProviderError
 from workflows.jobtypes.providers.builtin import builtin_job_types
 from workflows.jobtypes.providers.n8n import N8nProvider
 

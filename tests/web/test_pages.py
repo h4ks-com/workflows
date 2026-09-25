@@ -4,18 +4,21 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from conftest import (
-    MINIO_ENDPOINT,
-    FakeProber,
-    FakeStorage,
-    log_in,
-    make_job,
-    make_user,
-    queue_job,
-    with_storage,
-)
-from workflows.db import ExternalIdentity, JsonObject
-from workflows.runs.jobs import LogEvent, StepEvent, apply_event, start, succeed
+from conftest import MINIO_ENDPOINT
+from conftest import FakeProber
+from conftest import FakeStorage
+from conftest import log_in
+from conftest import make_job
+from conftest import make_user
+from conftest import queue_job
+from conftest import with_storage
+from workflows.db import ExternalIdentity
+from workflows.db import JsonObject
+from workflows.runs.jobs import LogEvent
+from workflows.runs.jobs import StepEvent
+from workflows.runs.jobs import apply_event
+from workflows.runs.jobs import start
+from workflows.runs.jobs import succeed
 from workflows.state import Services
 
 

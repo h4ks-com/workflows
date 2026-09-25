@@ -1,11 +1,14 @@
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Annotated, cast
+from typing import Annotated
+from typing import cast
 
 import httpx
 from authlib.integrations.starlette_client import OAuth
-from fastapi import Depends, Request
-from sqlalchemy.orm import Session, sessionmaker
+from fastapi import Depends
+from fastapi import Request
+from sqlalchemy.orm import Session
+from sqlalchemy.orm import sessionmaker
 
 from workflows.accounts.beans import BeansPoller
 from workflows.jobtypes.catalog import Catalog

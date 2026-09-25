@@ -2,11 +2,15 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from conftest import SONG_URL, FakeProber
-from workflows.jobtypes.catalog import HttpExecutor, JobType
+from conftest import SONG_URL
+from conftest import FakeProber
+from workflows.jobtypes.catalog import HttpExecutor
+from workflows.jobtypes.catalog import JobType
 from workflows.jobtypes.forms import form_from_schema
 from workflows.jobtypes.probe import Probe
-from workflows.jobtypes.providers.builtin import BUILTINS, Builtin, builtin_job_types
+from workflows.jobtypes.providers.builtin import BUILTINS
+from workflows.jobtypes.providers.builtin import Builtin
+from workflows.jobtypes.providers.builtin import builtin_job_types
 
 PROBE = Probe(100.0, "Some Song")
 

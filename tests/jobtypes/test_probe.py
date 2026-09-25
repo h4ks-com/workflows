@@ -5,7 +5,9 @@ import pytest
 import respx
 
 from conftest import SONG_URL
-from workflows.jobtypes.probe import Probe, ProbeError, YtdlProber
+from workflows.jobtypes.probe import Probe
+from workflows.jobtypes.probe import ProbeError
+from workflows.jobtypes.probe import YtdlProber
 
 YTDL = "http://ytdl.test"
 

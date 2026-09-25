@@ -5,7 +5,8 @@ from collections.abc import Callable
 from pydantic import JsonValue
 
 from workflows.db import JsonObject
-from workflows.jobtypes.probe import Probe, ProbeError
+from workflows.jobtypes.probe import Probe
+from workflows.jobtypes.probe import ProbeError
 
 DURATION = "duration"
 ARITHMETIC: dict[type[ast.operator], Callable[[float, float], float]] = {

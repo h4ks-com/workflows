@@ -1,12 +1,19 @@
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import datetime
+from datetime import timedelta
 
 import pytest
 
-from workflows.api.views import JobEventView, JobView, ProgressView
-from workflows.db import JobStatus, utcnow
-from workflows.jobtypes.catalog import Step, retired_type
-from workflows.web.render import relative_time, short_time, step_rows
+from workflows.api.views import JobEventView
+from workflows.api.views import JobView
+from workflows.api.views import ProgressView
+from workflows.db import JobStatus
+from workflows.db import utcnow
+from workflows.jobtypes.catalog import Step
+from workflows.jobtypes.catalog import retired_type
+from workflows.web.render import relative_time
+from workflows.web.render import short_time
+from workflows.web.render import step_rows
 
 NOW = datetime(2026, 9, 25, 12, 0)
 

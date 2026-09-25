@@ -1,8 +1,14 @@
-from sqlalchemy import select, update
+from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from workflows.db import Job, LedgerEntry, LedgerKind, User, utcnow
-from workflows.settings import CREDITS_PER_BEAN, FREE_DAILY_CREDITS
+from workflows.db import Job
+from workflows.db import LedgerEntry
+from workflows.db import LedgerKind
+from workflows.db import User
+from workflows.db import utcnow
+from workflows.settings import CREDITS_PER_BEAN
+from workflows.settings import FREE_DAILY_CREDITS
 
 BALANCE_COLUMNS = ["free_credits", "paid_credits", "free_day"]
 

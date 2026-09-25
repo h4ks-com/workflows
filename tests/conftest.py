@@ -2,7 +2,9 @@ import asyncio
 import json
 from base64 import b64encode
 from collections.abc import Iterator
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass
+from dataclasses import field
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -10,17 +12,24 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from itsdangerous import TimestampSigner
-from sqlalchemy import Engine, func, select
+from sqlalchemy import Engine
+from sqlalchemy import func
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from workflows.accounts.auth import SESSION_USER_KEY
 from workflows.accounts.ledger import adjust
 from workflows.app import create_app
-from workflows.db import Job, LedgerEntry, User
-from workflows.jobtypes.catalog import Quote, StaticProvider
-from workflows.jobtypes.probe import Probe, ProbeError
+from workflows.db import Job
+from workflows.db import LedgerEntry
+from workflows.db import User
+from workflows.jobtypes.catalog import Quote
+from workflows.jobtypes.catalog import StaticProvider
+from workflows.jobtypes.probe import Probe
+from workflows.jobtypes.probe import ProbeError
 from workflows.jobtypes.providers.builtin import builtin_job_types
-from workflows.runs.jobs import create_job, enqueue
+from workflows.runs.jobs import create_job
+from workflows.runs.jobs import enqueue
 from workflows.settings import Settings
 from workflows.state import Services
 

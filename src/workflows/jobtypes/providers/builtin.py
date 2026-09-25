@@ -2,11 +2,20 @@ from dataclasses import dataclass
 from typing import Literal
 
 import httpx
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
+from pydantic import HttpUrl
 from pydantic.config import JsonDict
 
-from workflows.jobtypes.catalog import HttpExecutor, JobType, StaticProvider, Step
-from workflows.jobtypes.forms import SHOW_WHEN, TEXTAREA, UPLOAD, form_from_schema
+from workflows.jobtypes.catalog import HttpExecutor
+from workflows.jobtypes.catalog import JobType
+from workflows.jobtypes.catalog import StaticProvider
+from workflows.jobtypes.catalog import Step
+from workflows.jobtypes.forms import SHOW_WHEN
+from workflows.jobtypes.forms import TEXTAREA
+from workflows.jobtypes.forms import UPLOAD
+from workflows.jobtypes.forms import form_from_schema
 from workflows.jobtypes.pricing import PriceRule
 
 SHORT_TEXT = 200

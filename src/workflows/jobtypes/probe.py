@@ -3,7 +3,8 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import httpx
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
+from pydantic import ValidationError
 
 PROBE_TIMEOUT_SECONDS = 60.0
 PROBE_CONCURRENCY = 4

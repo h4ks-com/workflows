@@ -1,60 +1,66 @@
 from dataclasses import replace
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter
+from fastapi import HTTPException
+from fastapi import Query
+from fastapi import status
 from fastapi.responses import RedirectResponse
-from pydantic import JsonValue, ValidationError
+from pydantic import JsonValue
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.datastructures import FormData
 from starlette.responses import Response
 
-from workflows.accounts.account import (
-    MAX_TOPUP_BEANS,
-    TopupRequest,
-    ledger_entries,
-    linked_identities,
-    topup_url,
-    unlink_identity,
-)
-from workflows.accounts.auth import csrf_token, require_admin
+from workflows.accounts.account import MAX_TOPUP_BEANS
+from workflows.accounts.account import TopupRequest
+from workflows.accounts.account import ledger_entries
+from workflows.accounts.account import linked_identities
+from workflows.accounts.account import topup_url
+from workflows.accounts.account import unlink_identity
+from workflows.accounts.auth import csrf_token
+from workflows.accounts.auth import require_admin
 from workflows.accounts.ledger import InsufficientCreditsError
-from workflows.api.admin import (
-    AdjustCreditsRequest,
-    adjust_credits,
-    cancel_job,
-    health,
-    remove_job_files,
-    set_paused,
-    user_or_404,
-)
-from workflows.api.routes import QuoteRequest, get_job_type, price_request
-from workflows.api.views import (
-    finished_job_views,
-    job_detail_view,
-    job_views,
-    queue_view,
-    quote_view,
-    type_view,
-)
-from workflows.db import Job, JobStatus, JsonObject, User
+from workflows.api.admin import AdjustCreditsRequest
+from workflows.api.admin import adjust_credits
+from workflows.api.admin import cancel_job
+from workflows.api.admin import health
+from workflows.api.admin import remove_job_files
+from workflows.api.admin import set_paused
+from workflows.api.admin import user_or_404
+from workflows.api.routes import QuoteRequest
+from workflows.api.routes import get_job_type
+from workflows.api.routes import price_request
+from workflows.api.views import finished_job_views
+from workflows.api.views import job_detail_view
+from workflows.api.views import job_views
+from workflows.api.views import queue_view
+from workflows.api.views import quote_view
+from workflows.api.views import type_view
+from workflows.db import Job
+from workflows.db import JobStatus
+from workflows.db import JsonObject
+from workflows.db import User
 from workflows.jobtypes.catalog import JobType
 from workflows.jobtypes.probe import ProbeError
-from workflows.runs.jobs import JobError, announce, create_job, enqueue
-from workflows.settings import CREDITS_PER_BEAN, FREE_DAILY_CREDITS
+from workflows.runs.jobs import JobError
+from workflows.runs.jobs import announce
+from workflows.runs.jobs import create_job
+from workflows.runs.jobs import enqueue
+from workflows.settings import CREDITS_PER_BEAN
+from workflows.settings import FREE_DAILY_CREDITS
 from workflows.state import Services
-from workflows.web.render import (
-    TOPUP_HINT,
-    Page,
-    PageCtx,
-    TemplateValue,
-    form_str,
-    log_lines,
-    login_redirect,
-    render,
-    running_panel,
-    verified_form,
-)
+from workflows.web.render import TOPUP_HINT
+from workflows.web.render import Page
+from workflows.web.render import PageCtx
+from workflows.web.render import TemplateValue
+from workflows.web.render import form_str
+from workflows.web.render import log_lines
+from workflows.web.render import login_redirect
+from workflows.web.render import render
+from workflows.web.render import running_panel
+from workflows.web.render import verified_form
 
 type Context = dict[str, TemplateValue]
 

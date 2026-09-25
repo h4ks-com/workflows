@@ -1,6 +1,8 @@
 import pytest
 
-from workflows.settings import DEFAULT_DATABASE_URL, Settings, load_settings
+from workflows.settings import DEFAULT_DATABASE_URL
+from workflows.settings import Settings
+from workflows.settings import load_settings
 
 
 def test_load_settings_reads_environment() -> None:

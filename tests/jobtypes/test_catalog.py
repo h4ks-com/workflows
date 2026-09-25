@@ -2,14 +2,12 @@ import httpx
 import pytest
 import respx
 
-from workflows.jobtypes.catalog import (
-    Catalog,
-    DispatchRequest,
-    HttpExecutor,
-    JobType,
-    ProviderError,
-    StaticProvider,
-)
+from workflows.jobtypes.catalog import Catalog
+from workflows.jobtypes.catalog import DispatchRequest
+from workflows.jobtypes.catalog import HttpExecutor
+from workflows.jobtypes.catalog import JobType
+from workflows.jobtypes.catalog import ProviderError
+from workflows.jobtypes.catalog import StaticProvider
 from workflows.jobtypes.forms import Form
 from workflows.jobtypes.pricing import PriceRule
 

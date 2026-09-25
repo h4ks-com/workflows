@@ -1,18 +1,19 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Annotated, ClassVar, Literal, Self
+from typing import Annotated
+from typing import ClassVar
+from typing import Literal
+from typing import Self
 
-from pydantic import (
-    AfterValidator,
-    BaseModel,
-    ConfigDict,
-    Field,
-    HttpUrl,
-    JsonValue,
-    create_model,
-    model_validator,
-)
+from pydantic import AfterValidator
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
+from pydantic import HttpUrl
+from pydantic import JsonValue
+from pydantic import create_model
+from pydantic import model_validator
 from pydantic.config import JsonDict
 
 from workflows.db import JsonObject

@@ -1,7 +1,11 @@
 import pytest
 
 from workflows.db import JsonObject
-from workflows.runs.bus import QUEUE_TOPIC, SUBSCRIBER_QUEUE_SIZE, BusEvent, EventBus, job_topic
+from workflows.runs.bus import QUEUE_TOPIC
+from workflows.runs.bus import SUBSCRIBER_QUEUE_SIZE
+from workflows.runs.bus import BusEvent
+from workflows.runs.bus import EventBus
+from workflows.runs.bus import job_topic
 
 
 async def test_subscribers_receive_events_for_their_topic_only() -> None:

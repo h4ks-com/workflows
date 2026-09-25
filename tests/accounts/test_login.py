@@ -1,5 +1,6 @@
 import json
-from base64 import b64decode, b64encode
+from base64 import b64decode
+from base64 import b64encode
 from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -12,10 +13,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.responses import RedirectResponse
 
-from conftest import SESSION_SECRET, FakeProber, log_in, make_user
+from conftest import SESSION_SECRET
+from conftest import FakeProber
+from conftest import log_in
+from conftest import make_user
 from workflows.accounts.login import safe_next
 from workflows.app import create_app
-from workflows.db import JsonObject, User
+from workflows.db import JsonObject
+from workflows.db import User
 from workflows.settings import Settings
 from workflows.state import Services
 

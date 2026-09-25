@@ -2,14 +2,17 @@ import asyncio
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Literal
+from typing import Protocol
 
 import httpx
 
 from workflows.db import JsonObject
 from workflows.jobtypes.forms import Form
-from workflows.jobtypes.pricing import PriceError, PriceRule
-from workflows.jobtypes.probe import Probe, Prober
+from workflows.jobtypes.pricing import PriceError
+from workflows.jobtypes.pricing import PriceRule
+from workflows.jobtypes.probe import Probe
+from workflows.jobtypes.probe import Prober
 
 logger = logging.getLogger(__name__)
 

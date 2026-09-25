@@ -1,10 +1,13 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field
 
 import pytest
 from minio.error import S3Error
 
 from workflows.settings import Settings
-from workflows.storage import MinioStorage, build_storage, object_location
+from workflows.storage import MinioStorage
+from workflows.storage import build_storage
+from workflows.storage import object_location
 
 ENDPOINT = "s3.example"
 

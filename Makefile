@@ -2,7 +2,7 @@
 
 install:
 	uv sync
-	uv run pre-commit install
+	uv run prek install
 
 precommit: fix
 

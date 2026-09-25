@@ -3,9 +3,12 @@ from dataclasses import dataclass
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from workflows.db import Job, JobStatus, utcnow
+from workflows.db import Job
+from workflows.db import JobStatus
+from workflows.db import utcnow
 from workflows.jobtypes.catalog import JobType
-from workflows.runs.jobs import queued_jobs, running_job
+from workflows.runs.jobs import queued_jobs
+from workflows.runs.jobs import running_job
 
 ROLLING_WINDOW = 20
 

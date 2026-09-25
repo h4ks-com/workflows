@@ -1,14 +1,20 @@
-from typing import Annotated, cast
+from typing import Annotated
+from typing import cast
 from urllib.parse import urlsplit
 
 from authlib.integrations.starlette_client import OAuth
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter
+from fastapi import HTTPException
+from fastapi import Query
+from fastapi import Request
+from fastapi import status
 from fastapi.responses import RedirectResponse
 
 from workflows.accounts.account import get_or_create_user
 from workflows.accounts.auth import SESSION_USER_KEY
 from workflows.settings import Settings
-from workflows.state import AppServices, Db
+from workflows.state import AppServices
+from workflows.state import Db
 
 LOGTO_CLIENT_NAME = "logto"
 USERNAME_CLAIM = "username"

@@ -32,8 +32,8 @@ dev = [
     "deptry==0.25.1",
     "bandit==1.9.4",
     "pip-audit==2.10.1",
-    "pre-commit==4.6.2",
     "types-authlib==1.8.0.20260911",
+    "prek==0.5.3",
 ]
 
 [build-system]
@@ -54,6 +54,9 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "C4", "PIE", "RET", "RUF", "C90", "PLR"]
 fixable = ["ALL"]
+
+[tool.ruff.lint.isort]
+force-single-line = true
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

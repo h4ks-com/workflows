@@ -1,13 +1,21 @@
 from datetime import datetime
 
-from fastapi import HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import HTTPException
+from fastapi import status
+from pydantic import BaseModel
+from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from workflows.db import Job, JobStatus, JsonObject, User
-from workflows.jobtypes.catalog import JobType, Quote
-from workflows.runs.eta import Estimator, QueueSlot, progress_fraction
+from workflows.db import Job
+from workflows.db import JobStatus
+from workflows.db import JsonObject
+from workflows.db import User
+from workflows.jobtypes.catalog import JobType
+from workflows.jobtypes.catalog import Quote
+from workflows.runs.eta import Estimator
+from workflows.runs.eta import QueueSlot
+from workflows.runs.eta import progress_fraction
 from workflows.runs.jobs import EventKind
 from workflows.settings import CREDITS_PER_BEAN
 from workflows.state import Services

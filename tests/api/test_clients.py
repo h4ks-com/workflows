@@ -4,8 +4,15 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from conftest import SERVICE_TOKEN, FakeProber, log_in, make_user
-from workflows.db import ExternalIdentity, Job, JobStatus, LinkRequest, utcnow
+from conftest import SERVICE_TOKEN
+from conftest import FakeProber
+from conftest import log_in
+from conftest import make_user
+from workflows.db import ExternalIdentity
+from workflows.db import Job
+from workflows.db import JobStatus
+from workflows.db import LinkRequest
+from workflows.db import utcnow
 from workflows.runs.jobs import hash_token
 from workflows.state import Services
 

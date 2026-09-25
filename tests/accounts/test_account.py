@@ -1,7 +1,8 @@
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from conftest import log_in, make_user
+from conftest import log_in
+from conftest import make_user
 from workflows.accounts.account import get_or_create_user
 from workflows.db import ExternalIdentity
 

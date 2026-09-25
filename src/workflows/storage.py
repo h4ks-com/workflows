@@ -1,6 +1,7 @@
 import asyncio
 from typing import Protocol
-from urllib.parse import unquote, urlsplit
+from urllib.parse import unquote
+from urllib.parse import urlsplit
 
 from minio import Minio
 from minio.error import S3Error

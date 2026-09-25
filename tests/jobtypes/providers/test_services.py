@@ -3,7 +3,8 @@ import pytest
 import respx
 from pydantic import JsonValue
 
-from workflows.jobtypes.catalog import HttpExecutor, ProviderError
+from workflows.jobtypes.catalog import HttpExecutor
+from workflows.jobtypes.catalog import ProviderError
 from workflows.jobtypes.providers.services import ServiceProvider
 
 SERVICE = "http://midifier.test:8000"

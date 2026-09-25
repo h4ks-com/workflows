@@ -2,39 +2,50 @@ import secrets
 from datetime import timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter
+from fastapi import Depends
+from fastapi import HTTPException
+from fastapi import status
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel
+from pydantic import Field
+from pydantic import HttpUrl
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.responses import Response
 
-from workflows.accounts.auth import csrf_token, require_service
-from workflows.accounts.ledger import InsufficientCreditsError, grant_daily
-from workflows.api.routes import QuoteRequest, price_request
-from workflows.api.views import JobView, job_view
-from workflows.db import (
-    ExternalIdentity,
-    Job,
-    JobStatus,
-    LinkRequest,
-    Subscription,
-    User,
-    utcnow,
-)
+from workflows.accounts.auth import csrf_token
+from workflows.accounts.auth import require_service
+from workflows.accounts.ledger import InsufficientCreditsError
+from workflows.accounts.ledger import grant_daily
+from workflows.api.routes import QuoteRequest
+from workflows.api.routes import price_request
+from workflows.api.views import JobView
+from workflows.api.views import job_view
+from workflows.db import ExternalIdentity
+from workflows.db import Job
+from workflows.db import JobStatus
+from workflows.db import LinkRequest
+from workflows.db import Subscription
+from workflows.db import User
+from workflows.db import utcnow
 from workflows.jobtypes.catalog import JobType
-from workflows.runs.jobs import announce, create_job, enqueue, hash_token
-from workflows.runs.webhooks import Subscribe, Webhook
-from workflows.state import AppServices, Db, Services
-from workflows.web.render import (
-    TOPUP_HINT,
-    Page,
-    PageCtx,
-    TemplateValue,
-    login_redirect,
-    render,
-    verified_form,
-)
+from workflows.runs.jobs import announce
+from workflows.runs.jobs import create_job
+from workflows.runs.jobs import enqueue
+from workflows.runs.jobs import hash_token
+from workflows.runs.webhooks import Subscribe
+from workflows.runs.webhooks import Webhook
+from workflows.state import AppServices
+from workflows.state import Db
+from workflows.state import Services
+from workflows.web.render import TOPUP_HINT
+from workflows.web.render import Page
+from workflows.web.render import PageCtx
+from workflows.web.render import TemplateValue
+from workflows.web.render import login_redirect
+from workflows.web.render import render
+from workflows.web.render import verified_form
 
 LINK_EXPIRY = timedelta(hours=1)
 IDENTITY_PATTERN = r"^\S{1,200}$"

@@ -1,7 +1,9 @@
 import pytest
 from pydantic import ValidationError
 
-from workflows.jobtypes.forms import FieldSpec, Form, form_from_schema
+from workflows.jobtypes.forms import FieldSpec
+from workflows.jobtypes.forms import Form
+from workflows.jobtypes.forms import form_from_schema
 
 FORM = Form(
     "Echo",

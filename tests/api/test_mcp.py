@@ -2,7 +2,9 @@ from fastapi import FastAPI
 from fastmcp import Client
 from sqlalchemy.orm import Session
 
-from conftest import SONG_URL, make_user, queue_job
+from conftest import SONG_URL
+from conftest import make_user
+from conftest import queue_job
 from workflows.state import Services
 
 

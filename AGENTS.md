@@ -14,14 +14,14 @@ Code lives under `src/workflows/`, grouped by domain; `tests/` mirrors the same 
 - `accounts/`: auth dependencies (session user, admin, service token, CSRF) `auth.py`; Logto login `login.py`; account, wallet and top-ups `account.py`; credits ledger `ledger.py`; Beans top-up poller `beans.py`
 - `api/`: JSON API under `/api` `routes.py` with response models in `views.py`; SSE streams `stream.py`; read-only MCP at `/mcp` `mcp.py`; client job submission, identity linking and confirm pages `clients.py`; admin API `admin.py`
 - `web/`: pages `pages.py`, templates and rendering helpers `render.py`, `templates/` and `static/`
-- The `Makefile` is the single canonical interface for all checks; CI and pre-commit both call it.
+- The `Makefile` is the single canonical interface for all checks; CI and the prek git hooks both call it.
 
 ## Stack
 - Python 3.14, managed with `uv`
 - FastAPI, SQLAlchemy 2 on SQLite (single replica), httpx for outbound calls, Pydantic models for every API shape
 
 ## Commands (Makefile is SSoT)
-- `make install` uv sync plus install pre-commit hooks
+- `make install` uv sync plus install the git hooks with prek
 - `make quality` the full gate: format-check, lint, typecheck, imports, dead-code, unused-deps, security, audit, coverage, build
 - `make run` serve the app with reload, reading `.env`
 - `make docker-build` / `make docker-run` build and run the image with `./data` as the SQLite volume

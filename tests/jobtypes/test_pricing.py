@@ -1,7 +1,9 @@
 import pytest
 
-from workflows.jobtypes.pricing import PriceError, PriceRule
-from workflows.jobtypes.probe import Probe, ProbeError
+from workflows.jobtypes.pricing import PriceError
+from workflows.jobtypes.pricing import PriceRule
+from workflows.jobtypes.probe import Probe
+from workflows.jobtypes.probe import ProbeError
 
 
 @pytest.mark.parametrize(

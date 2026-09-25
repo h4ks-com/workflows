@@ -5,11 +5,16 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy.orm import Session
 
-from conftest import make_user, queue_job
-from workflows.api.stream import _job_events, _queue_events
-from workflows.api.views import QueueView, queue_view
+from conftest import make_user
+from conftest import queue_job
+from workflows.api.stream import _job_events
+from workflows.api.stream import _queue_events
+from workflows.api.views import QueueView
+from workflows.api.views import queue_view
 from workflows.db import JobStatus
-from workflows.runs.bus import QUEUE_TOPIC, BusEvent, job_topic
+from workflows.runs.bus import QUEUE_TOPIC
+from workflows.runs.bus import BusEvent
+from workflows.runs.bus import job_topic
 from workflows.runs.jobs import start
 from workflows.state import Services
 

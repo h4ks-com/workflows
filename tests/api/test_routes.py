@@ -4,26 +4,29 @@ from collections.abc import Iterator
 from datetime import timedelta
 
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from starlette.requests import Request
 
-from conftest import (
-    FETCH_HEADERS,
-    SERVICE_TOKEN,
-    SONG_URL,
-    FakeProber,
-    assert_ledger_matches,
-    log_in,
-    make_job,
-    make_user,
-    queue_job,
-)
-from workflows.accounts.auth import require_admin, require_service
+from conftest import FETCH_HEADERS
+from conftest import SERVICE_TOKEN
+from conftest import SONG_URL
+from conftest import FakeProber
+from conftest import assert_ledger_matches
+from conftest import log_in
+from conftest import make_job
+from conftest import make_user
+from conftest import queue_job
+from workflows.accounts.auth import require_admin
+from workflows.accounts.auth import require_service
 from workflows.app import exit_when_dead
-from workflows.db import Job, JobStatus, JsonObject
-from workflows.runs.jobs import start, succeed
+from workflows.db import Job
+from workflows.db import JobStatus
+from workflows.db import JsonObject
+from workflows.runs.jobs import start
+from workflows.runs.jobs import succeed
 from workflows.state import Services
 
 LONG_SONG_URL = "https://youtube.example/watch?v=long"

@@ -4,7 +4,8 @@ import threading
 import time
 import urllib.request
 from collections.abc import Mapping
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer
 
 API_KEY = os.environ.get("FAKE_EXECUTOR_API_KEY", "")
 STEP_DELAY_SECONDS = 0.2

@@ -1,11 +1,15 @@
 import math
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable
+from collections.abc import Mapping
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated
+from typing import Literal
 
-from fastapi import Depends, Request
+from fastapi import Depends
+from fastapi import Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -13,14 +17,26 @@ from sqlalchemy.orm import Session
 from starlette.datastructures import FormData
 from starlette.responses import Response
 
-from workflows.accounts.auth import CurrentUser, is_admin, verify_csrf
+from workflows.accounts.auth import CurrentUser
+from workflows.accounts.auth import is_admin
+from workflows.accounts.auth import verify_csrf
 from workflows.accounts.ledger import grant_daily
-from workflows.api.views import JobEventView, JobView
-from workflows.db import Job, JobStatus, LedgerEntry, LedgerKind, LinkRequest, User, utcnow
-from workflows.jobtypes.catalog import JobType, Step
+from workflows.api.views import JobEventView
+from workflows.api.views import JobView
+from workflows.db import Job
+from workflows.db import JobStatus
+from workflows.db import LedgerEntry
+from workflows.db import LedgerKind
+from workflows.db import LinkRequest
+from workflows.db import User
+from workflows.db import utcnow
+from workflows.jobtypes.catalog import JobType
+from workflows.jobtypes.catalog import Step
 from workflows.jobtypes.forms import FieldSpec
 from workflows.settings import Settings
-from workflows.state import AppServices, Db, Services
+from workflows.state import AppServices
+from workflows.state import Db
+from workflows.state import Services
 
 RING_RADIUS = 44
 RING_CIRCUMFERENCE = round(2 * math.pi * RING_RADIUS, 1)

@@ -4,19 +4,22 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import Session
+from sqlalchemy.orm import sessionmaker
 
-from workflows.db import Job, JobStatus, utcnow
-from workflows.jobtypes.catalog import Catalog, DispatchRequest, Executor
+from workflows.db import Job
+from workflows.db import JobStatus
+from workflows.db import utcnow
+from workflows.jobtypes.catalog import Catalog
+from workflows.jobtypes.catalog import DispatchRequest
+from workflows.jobtypes.catalog import Executor
 from workflows.runs.bus import EventBus
-from workflows.runs.jobs import (
-    announce,
-    expire_stale_confirmations,
-    fail,
-    queued_jobs,
-    running_job,
-    start,
-)
+from workflows.runs.jobs import announce
+from workflows.runs.jobs import expire_stale_confirmations
+from workflows.runs.jobs import fail
+from workflows.runs.jobs import queued_jobs
+from workflows.runs.jobs import running_job
+from workflows.runs.jobs import start
 from workflows.settings import Settings
 
 logger = logging.getLogger(__name__)

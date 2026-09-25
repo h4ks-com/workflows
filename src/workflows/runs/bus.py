@@ -1,7 +1,9 @@
 import asyncio
 import logging
-from collections import Counter, defaultdict
-from collections.abc import Callable, Iterator
+from collections import Counter
+from collections import defaultdict
+from collections.abc import Callable
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
