@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_time.html" import ago %}
 {% block title %}admin · h4ks workflows{% endblock %}
 {% macro job_row(job) %}
 <tr>
@@ -7,7 +8,7 @@
   <td>{{ job.owner or 'guest' }}</td>
   <td><span class="tag {{ 'run' if job.status == 'running' else ('ok' if job.status == 'succeeded' else ('bad' if job.status in ('failed', 'cancelled') else 'wait')) }}">{{ job.status|status_label }}</span></td>
   <td>{{ job.quote }}</td>
-  <td class="num">{{ job.created_at|short_time }}</td>
+  <td class="num">{{ ago(job.created_at) }}</td>
   <td>
     <div class="row">
       {% if job.status in ('awaiting_confirmation', 'queued', 'running') %}
@@ -22,6 +23,8 @@
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button class="btn ghost" type="submit">remove files</button>
       </form>
+      {% elif job.removed_at %}
+      <span class="muted">files removed {{ ago(job.removed_at) }}</span>
       {% endif %}
     </div>
   </td>

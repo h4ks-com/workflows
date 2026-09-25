@@ -133,6 +133,18 @@
   }
   document.addEventListener("DOMContentLoaded", applyShowWhen);
 
+  // htmx asks for no quote while the browser finds the form invalid, so we say why in place of a stale price.
+  document.addEventListener("htmx:validation:halted", (event) => {
+    const quote = document.getElementById("quote-body");
+    const invalid = event.target.querySelector(":invalid");
+    if (!quote || !invalid) return;
+    const label = invalid.labels?.[0]?.firstChild?.textContent.trim().toLowerCase() || "the form";
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = `check ${label}: ${invalid.validationMessage.toLowerCase()}`;
+    quote.replaceChildren(note);
+  });
+
   document.addEventListener("dragover", (event) => {
     const zone = event.target.closest(".upload");
     if (!zone) return;

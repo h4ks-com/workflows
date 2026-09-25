@@ -1,0 +1,1 @@
+{% macro ago(value) %}<time datetime="{{ value.isoformat() }}" title="{{ value|short_time }} UTC">{{ value|relative_time }}</time>{% endmacro %}

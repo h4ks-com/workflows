@@ -345,7 +345,8 @@ def test_user_page_shows_job_history(
     response = client.get("/u/alice")
 
     assert response.status_code == 200
-    assert "song" in response.text
+    assert "song · waiting for confirmation · <time" in response.text
+    assert ">just now</time>" in response.text
 
 
 def test_user_page_unknown_user_is_404(client: TestClient) -> None:
@@ -638,9 +639,11 @@ def test_removed_job_hides_result_and_home_feed(
 
     job_page = client.get(f"/jobs/{job.id}")
     home = client.get("/")
+    admin = client.get("/admin")
 
     assert "removed by an admin" in job_page.text
     assert f"/jobs/{job.id}" not in home.text
+    assert "files removed <time" in admin.text
 
 
 def finished_job(session: Session, services: Services, title: str, type_name: str = "song") -> int:

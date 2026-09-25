@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_time.html" import ago %}
 {% block title %}{{ username }} · h4ks workflows{% endblock %}
 {% block content %}
 <section class="page">
@@ -7,7 +8,7 @@
   <span class="label">job history</span>
   <div class="queue">
     {% for job in jobs %}
-    <div class="q"><span class="pos">#{{ job.id }}</span><span class="what"><b>{{ job.type }}</b><small>{{ job.status|status_label }}</small></span><a class="tag" href="/jobs/{{ job.id }}">open</a><span></span></div>
+    <div class="q"><span class="pos">#{{ job.id }}</span><span class="what"><b>{{ job.result.title if job.result and job.result.title else job.type }}</b><small>{{ job.type }} · {{ job.status|status_label }} · {{ ago(job.finished_at or job.created_at) }}</small></span><a class="tag" href="/jobs/{{ job.id }}">open</a><span></span></div>
     {% else %}
     <p class="muted">no jobs yet. <a href="/#create">create one</a>.</p>
     {% endfor %}

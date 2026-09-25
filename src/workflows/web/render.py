@@ -60,19 +60,25 @@ def format_seconds(seconds: int | float | None) -> str:
     return f"{total // 60}:{total % 60:02d}"
 
 
-def _elapsed_label(started_at: datetime | None, at: datetime | None) -> str:
-    if started_at is None or at is None:
-        return ""
-    return format_seconds((at - started_at).total_seconds())
-
-
-def _step_events(events: list[JobEventView]) -> dict[str, datetime]:
-    last_seen: dict[str, datetime] = {}
+def _step_starts(events: list[JobEventView]) -> dict[str, datetime]:
+    starts: dict[str, datetime] = {}
     for event in events:
         step_name = event.data.get("step")
         if event.kind == "step" and isinstance(step_name, str):
-            last_seen[step_name] = event.created_at
-    return last_seen
+            starts.setdefault(step_name, event.created_at)
+    return starts
+
+
+def _step_durations(job: JobView, job_type: JobType, events: list[JobEventView]) -> dict[str, str]:
+    starts = _step_starts(events)
+    seen = [step.name for step in job_type.steps if step.name in starts]
+    if not seen:
+        return {}
+    ends = [starts[name] for name in seen[1:]] + [job.finished_at or utcnow()]
+    return {
+        name: format_seconds((end - starts[name]).total_seconds())
+        for name, end in zip(seen, ends, strict=True)
+    }
 
 
 def _todo_row(step: Step) -> StepRow:
@@ -91,18 +97,15 @@ def _now_row(step: Step, job: JobView, when: str) -> StepRow:
 
 
 def step_rows(job: JobView, job_type: JobType, events: list[JobEventView]) -> list[StepRow]:
-    last_seen = _step_events(events)
+    durations = _step_durations(job, job_type, events)
     if job.status == JobStatus.SUCCEEDED:
-        return [
-            _done_row(step, _elapsed_label(job.started_at, last_seen.get(step.name)))
-            for step in job_type.steps
-        ]
+        return [_done_row(step, durations.get(step.name, "")) for step in job_type.steps]
     if job.progress.step is None:
         return [_todo_row(step) for step in job_type.steps]
     rows = []
     reached = False
     for step in job_type.steps:
-        when = _elapsed_label(job.started_at, last_seen.get(step.name))
+        when = durations.get(step.name, "")
         if step.name == job.progress.step:
             reached = True
             rows.append(_now_row(step, job, when))

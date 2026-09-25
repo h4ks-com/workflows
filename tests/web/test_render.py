@@ -1,11 +1,41 @@
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 import pytest
 
-from workflows.db import utcnow
-from workflows.web.render import relative_time, short_time
+from workflows.api.views import JobEventView, JobView, ProgressView
+from workflows.db import JobStatus, utcnow
+from workflows.jobtypes.catalog import Step, retired_type
+from workflows.web.render import relative_time, short_time, step_rows
 
 NOW = datetime(2026, 9, 25, 12, 0)
+
+
+def test_each_step_shows_how_long_it_took() -> None:
+    steps = (Step("fetch", 5), Step("transcribe", 90), Step("store", 5))
+    midi = replace(retired_type("midi"), steps=steps)
+    job = JobView(
+        id=1,
+        type="midi",
+        status=JobStatus.SUCCEEDED,
+        owner=None,
+        quote=1,
+        params={},
+        progress=ProgressView(step="store", done=None, total=None, fraction=1.0),
+        result=None,
+        removed_at=None,
+        error=None,
+        created_at=NOW,
+        queued_at=NOW,
+        started_at=NOW,
+        finished_at=NOW + timedelta(seconds=92),
+    )
+    events = [
+        JobEventView(kind="step", data={"step": name}, created_at=NOW + timedelta(seconds=at))
+        for name, at in [("fetch", 0), ("transcribe", 1), ("transcribe", 60), ("store", 91)]
+    ]
+
+    assert [row.when for row in step_rows(job, midi, events)] == ["0:01", "1:30", "0:01"]
 
 
 def test_short_time_formats_a_timestamp() -> None:
