@@ -150,6 +150,27 @@ class Subscription(Base):
     created_at: Mapped[datetime] = mapped_column(default=utcnow)
 
 
+class QueueHold(Base):
+    __tablename__ = "queue_holds"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    reason: Mapped[str]
+    until: Mapped[datetime | None]
+    released_at: Mapped[datetime | None]
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
+class Draft(Base):
+    __tablename__ = "drafts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token: Mapped[str] = mapped_column(unique=True)
+    type: Mapped[str]
+    params: Mapped[JsonObject]
+    expires_at: Mapped[datetime] = mapped_column(index=True)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+
+
 class LedgerEntry(Base):
     __tablename__ = "ledger_entries"
 

@@ -10,12 +10,14 @@ from sqlalchemy.orm import Session
 from workflows.db import Job
 from workflows.db import JobStatus
 from workflows.db import JsonObject
+from workflows.db import QueueHold
 from workflows.db import User
 from workflows.jobtypes.catalog import JobType
 from workflows.jobtypes.catalog import Quote
 from workflows.runs.eta import Estimator
 from workflows.runs.eta import QueueSlot
 from workflows.runs.eta import progress_fraction
+from workflows.runs.holds import active_hold
 from workflows.runs.jobs import EventKind
 from workflows.settings import CREDITS_PER_BEAN
 from workflows.state import Services
@@ -85,8 +87,15 @@ class JobDetailView(JobView):
     events: list[JobEventView] = Field(description="Executor events, oldest first.")
 
 
+class HoldView(BaseModel):
+    reason: str = Field(description="Why the queue starts no new jobs.")
+    until: datetime | None = Field(
+        description="When the hold ends by itself, or null until an admin releases it."
+    )
+
+
 class QueueView(BaseModel):
-    paused: bool = Field(description="Whether the queue holds new jobs back.")
+    hold: HoldView | None = Field(description="The hold that keeps new jobs waiting, if any.")
     running: JobView | None = Field(description="The job running now.")
     queued: list[JobView] = Field(description="Waiting jobs, first in line first.")
 
@@ -150,11 +159,15 @@ def quote_view(priced: Quote) -> QuoteView:
     )
 
 
+def hold_view(hold: QueueHold | None) -> HoldView | None:
+    return HoldView(reason=hold.reason, until=hold.until) if hold else None
+
+
 def queue_view(session: Session, services: Services) -> QueueView:
     running, queued = Estimator(session).queue()
     catalog = services.catalog
     return QueueView(
-        paused=services.worker.paused,
+        hold=hold_view(active_hold(session)),
         running=job_view(running.job, catalog.find(running.job.type), running) if running else None,
         queued=[job_view(slot.job, catalog.find(slot.job.type), slot) for slot in queued],
     )

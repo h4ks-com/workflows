@@ -7,6 +7,8 @@ from workflows.db import Job
 from workflows.db import JobStatus
 from workflows.db import utcnow
 from workflows.jobtypes.catalog import JobType
+from workflows.runs.holds import active_hold
+from workflows.runs.holds import held_seconds
 from workflows.runs.jobs import queued_jobs
 from workflows.runs.jobs import running_job
 
@@ -65,8 +67,9 @@ class Estimator:
 
     def queue(self) -> tuple[QueueSlot | None, list[QueueSlot]]:
         running = running_job(self._session)
-        finish_at = self.remaining(running) if running else 0.0
-        running_slot = QueueSlot(running, 0, 0, round(finish_at)) if running else None
+        running_left = self.remaining(running) if running else 0.0
+        running_slot = QueueSlot(running, 0, 0, round(running_left)) if running else None
+        finish_at = max(running_left, held_seconds(active_hold(self._session)))
         slots = []
         for position, job in enumerate(queued_jobs(self._session), start=1):
             starts_in = finish_at

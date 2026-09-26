@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from conftest import ADMIN_TOKEN
 from conftest import MINIO_ENDPOINT
 from conftest import FakeStorage
 from conftest import log_in
@@ -18,7 +19,16 @@ from workflows.state import Services
 def test_admin_endpoints_require_admin(client: TestClient, session: Session) -> None:
     log_in(client, make_user(session, "alice"))
 
-    assert client.post("/api/admin/queue/pause").status_code == 403
+    assert client.put("/api/admin/queue/hold", json={"reason": "x"}).status_code == 403
+
+
+def test_admin_endpoints_need_a_login_or_the_admin_token(client: TestClient) -> None:
+    wrong = {"Authorization": "Bearer nope"}
+    right = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
+
+    assert client.get("/api/admin/health").status_code == 401
+    assert client.get("/api/admin/health", headers=wrong).status_code == 401
+    assert client.get("/api/admin/health", headers=right).status_code == 200
 
 
 def test_admin_cancels_any_job_and_refunds(
@@ -52,15 +62,38 @@ def test_admin_adjust_unknown_user(client: TestClient, session: Session) -> None
     assert response.status_code == 404
 
 
-def test_admin_pauses_and_resumes_the_queue(
-    client: TestClient, session: Session, services: Services
-) -> None:
-    log_in(client, make_user(session, "root"))
+def test_admin_token_holds_and_releases_the_queue(client: TestClient) -> None:
+    headers = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
 
-    assert client.post("/api/admin/queue/pause").json() == {"paused": True}
-    assert services.worker.paused is True
-    assert client.post("/api/admin/queue/resume").json() == {"paused": False}
-    assert services.worker.paused is False
+    held = client.put(
+        "/api/admin/queue/hold", json={"reason": "gpu work", "minutes": 30}, headers=headers
+    ).json()
+    assert held["reason"] == "gpu work"
+    assert held["until"] is not None
+    assert client.get("/api/queue").json()["hold"]["reason"] == "gpu work"
+    assert client.get("/api/admin/queue/hold", headers=headers).json()["reason"] == "gpu work"
+
+    assert client.delete("/api/admin/queue/hold", headers=headers).status_code == 204
+    assert client.get("/api/queue").json()["hold"] is None
+    assert client.get("/api/admin/queue/hold", headers=headers).json() is None
+
+
+def test_hold_without_minutes_lasts_until_released(client: TestClient) -> None:
+    headers = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
+
+    held = client.put("/api/admin/queue/hold", json={"reason": "upgrade"}, headers=headers)
+
+    assert held.json() == {"reason": "upgrade", "until": None}
+
+
+def test_hold_rejects_bad_minutes(client: TestClient) -> None:
+    headers = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
+
+    response = client.put(
+        "/api/admin/queue/hold", json={"reason": "x", "minutes": 0}, headers=headers
+    )
+
+    assert response.status_code == 422
 
 
 def test_admin_health_reports_executors_and_poller(
@@ -77,7 +110,7 @@ def test_admin_health_reports_executors_and_poller(
         "podcast": False,
         "image": False,
     }
-    assert response["worker_paused"] is False
+    assert response["queue_held"] is False
     assert response["beans_poller_last_success"] is None
 
 

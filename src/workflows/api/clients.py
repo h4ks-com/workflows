@@ -18,6 +18,8 @@ from workflows.accounts.auth import csrf_token
 from workflows.accounts.auth import require_service
 from workflows.accounts.ledger import InsufficientCreditsError
 from workflows.accounts.ledger import grant_daily
+from workflows.api.drafts import DraftView
+from workflows.api.drafts import share_form
 from workflows.api.routes import QuoteRequest
 from workflows.api.routes import price_request
 from workflows.api.views import JobView
@@ -140,6 +142,11 @@ async def submit_job(body: ClientJobRequest, session: Db, services: AppServices)
     if linked_user is not None:
         return _submit_for_linked_user(session, services, job, linked_user)
     return _submit_awaiting_confirmation(session, services, job, job_type)
+
+
+@router.post("/drafts", status_code=status.HTTP_201_CREATED)
+async def create_draft_link(body: QuoteRequest, services: AppServices) -> DraftView:
+    return await share_form(services, body)
 
 
 @router.post("/links")

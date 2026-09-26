@@ -39,13 +39,24 @@
 <div class="grid-2">
   <div class="panel">
     <span class="label">queue</span>
+    {% if queue.hold %}
     <div class="row">
-      <span class="tag {{ 'bad' if queue.paused else 'ok' }}">{{ 'paused' if queue.paused else 'running' }}</span>
-      <form method="post" action="/admin/{{ 'resume' if queue.paused else 'pause' }}">
+      <span class="tag bad">on hold</span>
+      <span class="muted">{{ queue.hold.reason }}{% if queue.hold.until %}, until <span class="num">{{ queue.hold.until.strftime('%H:%M') }} UTC</span>{% endif %}</span>
+      <form method="post" action="/admin/release">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button class="btn ghost" type="submit">{{ 'resume queue' if queue.paused else 'pause queue' }}</button>
+        <button class="btn ghost" type="submit">release queue</button>
       </form>
     </div>
+    {% else %}
+    <div class="row"><span class="tag ok">running</span></div>
+    <form method="post" action="/admin/hold" class="row">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input name="reason" required maxlength="200" placeholder="why, like GPU maintenance">
+      <input name="minutes" type="number" min="1" placeholder="minutes, empty until released">
+      <button class="btn ghost" type="submit">hold queue</button>
+    </form>
+    {% endif %}
   </div>
   <div class="panel">
     <span class="label">health</span>

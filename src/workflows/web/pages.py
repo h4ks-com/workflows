@@ -1,3 +1,4 @@
+import re
 from dataclasses import replace
 from typing import Annotated
 
@@ -24,11 +25,13 @@ from workflows.accounts.auth import require_admin
 from workflows.accounts.beans import PayoutError
 from workflows.accounts.ledger import InsufficientCreditsError
 from workflows.api.admin import AdjustCreditsRequest
+from workflows.api.admin import HoldRequest
 from workflows.api.admin import adjust_credits
 from workflows.api.admin import cancel_job
 from workflows.api.admin import health
+from workflows.api.admin import hold
+from workflows.api.admin import release
 from workflows.api.admin import remove_job_files
-from workflows.api.admin import set_paused
 from workflows.api.admin import user_or_404
 from workflows.api.routes import QuoteRequest
 from workflows.api.routes import get_job_type
@@ -45,6 +48,9 @@ from workflows.db import JsonObject
 from workflows.db import User
 from workflows.jobtypes.catalog import JobType
 from workflows.jobtypes.probe import ProbeError
+from workflows.runs.drafts import DRAFT_ID_PATTERN
+from workflows.runs.drafts import delete_draft
+from workflows.runs.drafts import live_draft
 from workflows.runs.jobs import JobError
 from workflows.runs.jobs import announce
 from workflows.runs.jobs import create_job
@@ -73,6 +79,7 @@ ADMIN_RECENT_JOBS = 50
 ADMIN_JOB_FETCH = 200
 PROBE_FAILED = "check the link, we could not read it"
 FORM_INVALID = "check the form for mistakes"
+DRAFT_GONE = "this form link has expired or was already used, ask for a new one"
 
 router = APIRouter()
 
@@ -118,7 +125,11 @@ async def partial_queue(page: PageCtx) -> Response:
 
 
 def _submit_context(
-    page: Page, job_type: JobType, error: str | None = None, prefill: JsonObject | None = None
+    page: Page,
+    job_type: JobType,
+    error: str | None = None,
+    prefill: JsonObject | None = None,
+    draft: str | None = None,
 ) -> Context:
     fields = list(job_type.form.fields)
     if prefill:
@@ -131,26 +142,56 @@ def _submit_context(
         "fields": fields,
         "quote": None,
         "prefilled": bool(prefill),
+        "draft": draft,
         "error": error,
         "csrf_token": csrf_token(page.request),
     }
 
 
+def _draft_token(value: object) -> str | None:
+    return value if isinstance(value, str) and re.fullmatch(DRAFT_ID_PATTERN, value) else None
+
+
 def _resubmit_page(
-    page: Page, job_type: JobType, error: str, typed: JsonObject, status_code: int
+    page: Page, job_type: JobType, error: str, form: FormData, status_code: int
 ) -> Response:
-    context = _submit_context(page, job_type, error, prefill=typed)
+    typed = params_from_form(form, job_type)
+    context = _submit_context(page, job_type, error, typed, _draft_token(form.get("draft")))
     return render(page, "submit.html", context, status_code)
+
+
+def _prefill(page: Page, type_name: str, from_job: int | None, draft: str | None) -> JsonObject:
+    if draft is not None:
+        stored = live_draft(page.session, draft)
+        page.session.commit()
+        if stored is None or stored.type != type_name:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, DRAFT_GONE)
+        return stored.params
+    source = page.session.get(Job, from_job) if from_job is not None else None
+    return source.params if source is not None and source.type == type_name else {}
 
 
 @router.get("/submit/{type_name}")
 async def submit_page(
-    type_name: str, page: PageCtx, from_job: Annotated[int | None, Query(alias="from")] = None
+    type_name: str,
+    page: PageCtx,
+    from_job: Annotated[int | None, Query(alias="from")] = None,
+    draft: Annotated[str | None, Query(pattern=DRAFT_ID_PATTERN)] = None,
 ) -> Response:
     job_type = get_job_type(page.services, type_name)
-    source = page.session.get(Job, from_job) if from_job is not None else None
-    prefill = source.params if source is not None and source.type == type_name else None
-    return render(page, "submit.html", _submit_context(page, job_type, prefill=prefill))
+    prefill = _prefill(page, type_name, from_job, draft)
+    return render(
+        page, "submit.html", _submit_context(page, job_type, prefill=prefill, draft=draft)
+    )
+
+
+@router.get("/d/{token}")
+async def draft_link(token: str, page: PageCtx) -> Response:
+    stored = live_draft(page.session, token) if _draft_token(token) else None
+    page.session.commit()
+    if stored is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, DRAFT_GONE)
+    return RedirectResponse(f"/submit/{stored.type}?draft={token}", status_code=303)
 
 
 async def _price_form(page: Page, job_type: JobType, form: FormData) -> Context:
@@ -196,7 +237,8 @@ def form_error(job_type: JobType, detail: JsonValue) -> str:
 @router.post("/submit/{type_name}")
 async def submit_job(type_name: str, page: PageCtx) -> Response:
     if page.user is None:
-        return login_redirect(f"/submit/{type_name}")
+        draft = _draft_token((await page.request.form()).get("draft"))
+        return login_redirect(f"/submit/{type_name}" + (f"?draft={draft}" if draft else ""))
     job_type = get_job_type(page.services, type_name)
     form = await verified_form(page.request)
     return await _create_and_redirect(page, page.user, job_type, form)
@@ -212,15 +254,18 @@ async def _create_and_redirect(
         if error.status_code != status.HTTP_422_UNPROCESSABLE_CONTENT:
             raise
         error_text = form_error(job_type, error.detail)
-        return _resubmit_page(page, job_type, error_text, request.params, 422)
+        return _resubmit_page(page, job_type, error_text, form, 422)
     except ProbeError:
-        return _resubmit_page(page, job_type, PROBE_FAILED, request.params, 502)
+        return _resubmit_page(page, job_type, PROBE_FAILED, form, 502)
     job = create_job(page.session, job_type, params, priced, user)
     try:
         enqueue(page.session, job, user)
     except InsufficientCreditsError:
         page.session.rollback()
-        return _resubmit_page(page, job_type, TOPUP_HINT, request.params, 402)
+        return _resubmit_page(page, job_type, TOPUP_HINT, form, 402)
+    draft = _draft_token(form.get("draft"))
+    if draft:
+        delete_draft(page.session, draft)
     page.session.commit()
     announce(page.services.bus, job)
     return RedirectResponse(f"/jobs/{job.id}", status_code=303)
@@ -321,7 +366,7 @@ def _render_admin(
     context: Context = {
         "queue": queue,
         "recent_jobs": recent_jobs,
-        "health": health(page.services),
+        "health": health(page.session, page.services),
         "csrf_token": csrf_token(page.request),
         "active": "admin",
         "error": error,
@@ -338,22 +383,30 @@ async def admin_page(page: PageCtx) -> Response:
     return await _admin_redirect(page) or _render_admin(page)
 
 
-@router.post("/admin/pause")
-async def admin_pause(page: PageCtx) -> Response:
-    return await _toggle_pause(page, True)
+@router.post("/admin/hold")
+async def admin_hold(page: PageCtx) -> Response:
+    redirect = await _admin_redirect(page)
+    if redirect:
+        return redirect
+    form = await verified_form(page.request)
+    minutes = form_str(form, "minutes")
+    try:
+        body = HoldRequest.model_validate(
+            {"reason": form_str(form, "reason"), "minutes": minutes or None}
+        )
+    except ValidationError:
+        return _render_admin(page, "give a reason, and minutes as a whole number or nothing", 422)
+    hold(page.session, body)
+    return RedirectResponse("/admin", status_code=303)
 
 
-@router.post("/admin/resume")
-async def admin_resume(page: PageCtx) -> Response:
-    return await _toggle_pause(page, False)
-
-
-async def _toggle_pause(page: Page, paused: bool) -> Response:
+@router.post("/admin/release")
+async def admin_release(page: PageCtx) -> Response:
     redirect = await _admin_redirect(page)
     if redirect:
         return redirect
     await verified_form(page.request)
-    set_paused(page.services, paused)
+    release(page.session)
     return RedirectResponse("/admin", status_code=303)
 
 

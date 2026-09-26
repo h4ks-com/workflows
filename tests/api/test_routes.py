@@ -163,7 +163,7 @@ def test_session_posts_need_the_fetch_header(
     log_in(client, user)
     assert client.post(f"/api/jobs/{job.id}/cancel").status_code == 403
     assert client.post("/api/topups", json={"beans": 5}).status_code == 403
-    assert client.post("/api/admin/queue/pause").status_code == 403
+    assert client.delete("/api/admin/queue/hold").status_code == 403
     assert client.post("/api/quote", json=SONG, headers=SERVICE_HEADERS).status_code == 200
     assert client.post(f"/api/jobs/{job.id}/cancel", headers=FETCH_HEADERS).status_code == 200
 
@@ -210,7 +210,7 @@ def test_queue_orders_jobs_with_etas(
 
     queue = client.get("/api/queue").json()
 
-    assert not queue["paused"]
+    assert queue["hold"] is None
     assert queue["running"]["id"] == running.id
     assert queue["running"]["eta_seconds"] == 60
     assert [(job["id"], job["position"]) for job in queue["queued"]] == [(queued.id, 1)]

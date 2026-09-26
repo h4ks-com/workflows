@@ -20,6 +20,7 @@ from workflows.db import JobStatus
 from workflows.db import utcnow
 from workflows.runs.bus import QUEUE_TOPIC
 from workflows.runs.bus import EventBus
+from workflows.runs.holds import hold_queue
 from workflows.runs.jobs import hash_token
 from workflows.runs.jobs import start
 from workflows.runs.worker import REFUSED_ERROR
@@ -117,14 +118,29 @@ async def test_queued_job_of_a_retired_type_fails_and_refunds(
     assert user.free_credits == 500
 
 
-async def test_paused_worker_leaves_the_queue_alone(session: Session, services: Services) -> None:
+async def test_held_queue_starts_no_job(session: Session, services: Services) -> None:
     job = queue_job(session, services, make_user(session, "alice"))
-    services.worker.paused = True
+    hold_queue(session, "gpu work", None)
+    session.commit()
 
     await services.worker.tick()
 
     session.expire_all()
     assert job.status == JobStatus.QUEUED
+
+
+@respx.mock
+async def test_expired_hold_lets_the_queue_run(session: Session, services: Services) -> None:
+    respx.post(SONG_EXECUTOR).respond(202)
+    job = queue_job(session, services, make_user(session, "alice"))
+    hold = hold_queue(session, "short break", 1)
+    hold.until = utcnow() - timedelta(seconds=1)
+    session.commit()
+
+    await services.worker.tick()
+
+    session.expire_all()
+    assert job.status == JobStatus.RUNNING
 
 
 async def test_silent_running_job_times_out(session: Session, services: Services) -> None:

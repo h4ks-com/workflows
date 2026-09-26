@@ -9,16 +9,21 @@ from pydantic import Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from workflows.accounts.auth import require_admin
 from workflows.accounts.auth import require_fetch_header
+from workflows.accounts.auth import require_operator
 from workflows.accounts.ledger import adjust
+from workflows.api.views import HoldView
 from workflows.api.views import JobView
 from workflows.api.views import get_job_or_404
+from workflows.api.views import hold_view
 from workflows.api.views import job_view
 from workflows.db import Job
 from workflows.db import JobEvent
 from workflows.db import User
 from workflows.db import utcnow
+from workflows.runs.holds import active_hold
+from workflows.runs.holds import hold_queue
+from workflows.runs.holds import release_queue
 from workflows.runs.jobs import StoredResult
 from workflows.runs.jobs import announce
 from workflows.runs.jobs import cancel
@@ -29,9 +34,10 @@ from workflows.storage import object_location
 
 REMOVED_MESSAGE = "removed by an admin"
 STORAGE_NOT_CONFIGURED = "storage is not configured"
+MAX_HOLD_MINUTES = 7 * 24 * 60
 
 router = APIRouter(
-    prefix="/api/admin", dependencies=[Depends(require_fetch_header), Depends(require_admin)]
+    prefix="/api/admin", dependencies=[Depends(require_fetch_header), Depends(require_operator)]
 )
 
 
@@ -46,13 +52,19 @@ class AdjustedBalanceView(BaseModel):
     paid_credits: int = Field(description="Credits bought with beans.")
 
 
-class PauseView(BaseModel):
-    paused: bool = Field(description="Whether the queue holds new jobs back.")
+class HoldRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=200, description="Why the queue is on hold.")
+    minutes: int | None = Field(
+        None,
+        ge=1,
+        le=MAX_HOLD_MINUTES,
+        description="How long to hold the queue, or null to hold it until released.",
+    )
 
 
 class HealthView(BaseModel):
     executors: dict[str, bool] = Field(description="Whether each job type has an executor.")
-    worker_paused: bool = Field(description="Whether the queue is paused.")
+    queue_held: bool = Field(description="Whether a hold keeps new jobs waiting.")
     worker_alive: bool = Field(description="Whether the queue worker task is running.")
     beans_poller_last_success: datetime | None = Field(
         description="When the beans poller last read transactions successfully."
@@ -84,9 +96,15 @@ def adjust_credits(session: Session, username: str, body: AdjustCreditsRequest) 
     return user
 
 
-def set_paused(services: Services, paused: bool) -> PauseView:
-    services.worker.paused = paused
-    return PauseView(paused=paused)
+def hold(session: Session, body: HoldRequest) -> HoldView:
+    held = hold_queue(session, body.reason, body.minutes)
+    session.commit()
+    return HoldView(reason=held.reason, until=held.until)
+
+
+def release(session: Session) -> None:
+    release_queue(session)
+    session.commit()
 
 
 async def remove_job_files(session: Session, services: Services, job_id: int) -> Job:
@@ -109,10 +127,10 @@ async def remove_job_files(session: Session, services: Services, job_id: int) ->
     return job
 
 
-def health(services: Services) -> HealthView:
+def health(session: Session, services: Services) -> HealthView:
     return HealthView(
         executors={job_type.name: job_type.available for job_type in services.catalog.all()},
-        worker_paused=services.worker.paused,
+        queue_held=active_hold(session) is not None,
         worker_alive=services.worker.alive,
         beans_poller_last_success=services.beans_poller.last_success
         if services.beans_poller
@@ -143,16 +161,21 @@ async def admin_adjust_credits(
     )
 
 
-@router.post("/queue/pause")
-async def admin_pause_queue(services: AppServices) -> PauseView:
-    return set_paused(services, True)
+@router.get("/queue/hold")
+async def admin_get_hold(session: Db) -> HoldView | None:
+    return hold_view(active_hold(session))
 
 
-@router.post("/queue/resume")
-async def admin_resume_queue(services: AppServices) -> PauseView:
-    return set_paused(services, False)
+@router.put("/queue/hold")
+async def admin_hold_queue(body: HoldRequest, session: Db) -> HoldView:
+    return hold(session, body)
+
+
+@router.delete("/queue/hold", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_release_queue(session: Db) -> None:
+    release(session)
 
 
 @router.get("/health")
-async def admin_health(services: AppServices) -> HealthView:
-    return health(services)
+async def admin_health(session: Db, services: AppServices) -> HealthView:
+    return health(session, services)

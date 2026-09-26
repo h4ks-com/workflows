@@ -2,6 +2,8 @@ from fastmcp import FastMCP
 from pydantic import BaseModel
 from pydantic import Field
 
+from workflows.api.drafts import DraftView
+from workflows.api.drafts import share_form
 from workflows.api.routes import DEFAULT_JOB_LIMIT
 from workflows.api.routes import MAX_JOB_LIMIT
 from workflows.api.routes import QuoteRequest
@@ -39,6 +41,15 @@ def build_mcp(services: Services) -> FastMCP:
         """Price a job without submitting it."""
         _, _, priced = await price_request(services, QuoteRequest(type=type, params=params))
         return quote_view(priced)
+
+    @mcp.tool
+    async def share_filled_form(type: str, params: JsonObject) -> DraftView:
+        """Fill a job's form and get a short link to it, so someone can review it and submit.
+
+        No login is needed to make the link; the person who opens it logs in to submit.
+        Leave out fields you do not know. The link works for 7 days and for one submission.
+        """
+        return await share_form(services, QuoteRequest(type=type, params=params))
 
     @mcp.tool
     def get_queue() -> QueueView:

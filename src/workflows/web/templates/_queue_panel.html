@@ -1,3 +1,6 @@
+{% if queue.hold %}
+<div class="notice warn">new jobs wait {% if queue.hold.until %}until <span class="num">{{ queue.hold.until.strftime('%H:%M') }} UTC</span>{% else %}until an admin resumes the queue{% endif %}: {{ queue.hold.reason }}</div>
+{% endif %}
 {% if running %}
 <div class="panel">
   <span class="label">running now</span>

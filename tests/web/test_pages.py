@@ -16,6 +16,7 @@ from conftest import MINIO_ENDPOINT
 from conftest import N8N_URL
 from conftest import FakeProber
 from conftest import FakeStorage
+from conftest import csrf_from
 from conftest import log_in
 from conftest import make_job
 from conftest import make_user
@@ -36,10 +37,6 @@ from workflows.runs.jobs import start
 from workflows.runs.jobs import succeed
 from workflows.settings import Settings
 from workflows.state import Services
-
-
-def csrf_from(html: str) -> str:
-    return html.split('name="csrf_token" value="')[1].split('"')[0]
 
 
 def test_html_pages_are_not_cached(client: TestClient) -> None:
@@ -326,19 +323,33 @@ def test_admin_page_for_admin(client: TestClient, session: Session) -> None:
     response = client.get("/admin")
 
     assert response.status_code == 200
-    assert "pause queue" in response.text
+    assert "hold queue" in response.text
 
 
-def test_admin_pause_and_resume(client: TestClient, session: Session, services: Services) -> None:
+def test_admin_holds_and_releases_the_queue(client: TestClient, session: Session) -> None:
     log_in(client, make_user(session, "root"))
     page = client.get("/admin")
 
-    client.post("/admin/pause", data={"csrf_token": csrf_from(page.text)}, follow_redirects=False)
-    assert services.worker.paused is True
+    form = {"csrf_token": csrf_from(page.text), "reason": "gpu work", "minutes": "30"}
+    client.post("/admin/hold", data=form, follow_redirects=False)
+    held = client.get("/")
+    assert "new jobs wait until" in held.text
+    assert "gpu work" in held.text
 
     page = client.get("/admin")
-    client.post("/admin/resume", data={"csrf_token": csrf_from(page.text)}, follow_redirects=False)
-    assert services.worker.paused is False
+    assert "release queue" in page.text
+    client.post("/admin/release", data={"csrf_token": csrf_from(page.text)}, follow_redirects=False)
+    assert client.get("/api/queue").json()["hold"] is None
+
+
+def test_admin_hold_without_reason_is_refused(client: TestClient, session: Session) -> None:
+    log_in(client, make_user(session, "root"))
+    page = client.get("/admin")
+
+    response = client.post("/admin/hold", data={"csrf_token": csrf_from(page.text), "reason": ""})
+
+    assert response.status_code == 422
+    assert client.get("/api/queue").json()["hold"] is None
 
 
 def with_payout(app: FastAPI, services: Services) -> None:

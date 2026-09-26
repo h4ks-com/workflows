@@ -8,11 +8,12 @@
 <div class="notice warn">this job type is not available yet.</div>
 {% else %}
 {% if error %}<div class="notice warn">{{ error }}</div>{% endif %}
-{% if not me %}<div class="notice">log in to submit this job. <a href="/login?next=/submit/{{ job_type.name }}">log in</a></div>{% endif %}
+{% if not me %}<div class="notice">log in to submit this job. <a href="/login?next={{ ('/submit/' ~ job_type.name ~ ('?draft=' ~ draft if draft else ''))|urlencode }}">log in</a></div>{% endif %}
 <form method="post" action="/submit/{{ job_type.name }}" class="form-grid" id="submit-form"
   hx-post="/submit/{{ job_type.name }}/quote" hx-trigger="{% if prefilled %}load, {% endif %}input changed delay:400ms, change"
   hx-target="#quote-body" hx-swap="innerHTML">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+{% if draft %}<input type="hidden" name="draft" value="{{ draft }}">{% endif %}
 <div class="panel">
   {% for f in fields %}
   <div class="field"{% if f.show_when %} data-show-when="{{ f.show_when|tojson|forceescape }}"{% endif %}>

@@ -16,6 +16,7 @@ from workflows.jobtypes.catalog import DispatchRequest
 from workflows.jobtypes.catalog import Executor
 from workflows.jobtypes.catalog import JobType
 from workflows.runs.bus import EventBus
+from workflows.runs.holds import active_hold
 from workflows.runs.jobs import announce
 from workflows.runs.jobs import expire_stale_confirmations
 from workflows.runs.jobs import fail
@@ -89,7 +90,6 @@ class QueueWorker:
         self._bus = bus
         self._settings = settings
         self._task: asyncio.Task[None] | None = None
-        self.paused = False
 
     def start(self) -> asyncio.Task[None]:
         self._task = asyncio.create_task(self.run(), name="queue worker")
@@ -114,7 +114,7 @@ class QueueWorker:
             running = running_job(session)
             if running is not None:
                 changed += self._fail_if_silent(session, running)
-            elif not self.paused:
+            elif active_hold(session) is None:
                 candidate = self._next_candidate(session, changed)
         for job in changed:
             announce(self._bus, job)

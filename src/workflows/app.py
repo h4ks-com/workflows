@@ -50,6 +50,7 @@ from workflows.jobtypes.providers.builtin import builtin_provider
 from workflows.jobtypes.providers.n8n import N8nProvider
 from workflows.jobtypes.providers.services import ServiceProvider
 from workflows.runs.bus import EventBus
+from workflows.runs.drafts import sweep_drafts
 from workflows.runs.jobs import InvalidEventError
 from workflows.runs.jobs import JobError
 from workflows.runs.media import build_stager
@@ -254,6 +255,7 @@ def create_app(
                 worker.start(),
                 asyncio.create_task(notifier.run(), name="webhook notifier"),
                 asyncio.create_task(catalog.run(), name="job type catalog"),
+                asyncio.create_task(sweep_drafts(sessions), name="draft sweeper"),
             ]
             if beans_poller is not None:
                 tasks.append(asyncio.create_task(beans_poller.run(), name="beans poller"))

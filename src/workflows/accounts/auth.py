@@ -25,11 +25,15 @@ def bearer_token(request: Request) -> str | None:
     return header.removeprefix(BEARER_PREFIX) if header.startswith(BEARER_PREFIX) else None
 
 
-def is_service(request: Request, settings: Settings) -> bool:
+def _bearer_matches(request: Request, expected: str) -> bool:
     token = bearer_token(request)
-    if not token or not settings.service_token:
+    if not token or not expected:
         return False
-    return hmac.compare_digest(token.encode(), settings.service_token.encode())
+    return hmac.compare_digest(token.encode(), expected.encode())
+
+
+def is_service(request: Request, settings: Settings) -> bool:
+    return _bearer_matches(request, settings.service_token)
 
 
 def is_admin(user: User, settings: Settings) -> bool:
@@ -57,6 +61,16 @@ async def require_admin(user: LoggedInUser, services: AppServices) -> User:
     if not is_admin(user, services.settings):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "admins only")
     return user
+
+
+async def require_operator(request: Request, user: CurrentUser, services: AppServices) -> None:
+    """Let in the `ADMIN_TOKEN` bearer or a logged-in admin.
+
+    :raises HTTPException: 401 for anyone else not logged in, 403 for a logged-in non-admin.
+    """
+    if _bearer_matches(request, services.settings.admin_token):
+        return
+    await require_admin(await require_user(user), services)
 
 
 async def require_service(request: Request, services: AppServices) -> None:

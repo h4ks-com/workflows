@@ -19,6 +19,7 @@ class Settings:
     base_url: str = DEFAULT_BASE_URL
     service_token: str = ""
     admin_users: frozenset[str] = frozenset()
+    admin_token: str = ""
     n8n_url: str = ""
     n8n_api_key: str = ""
     workflow_services: tuple[str, ...] = ()
@@ -65,6 +66,7 @@ def load_settings(environ: Mapping[str, str] = os.environ) -> Settings:
         base_url=environ.get("BASE_URL", DEFAULT_BASE_URL).rstrip("/"),
         service_token=environ.get("SERVICE_TOKEN", ""),
         admin_users=_username_list(environ.get("WORKFLOWS_ADMIN_USERS", "")),
+        admin_token=environ.get("ADMIN_TOKEN", ""),
         n8n_url=environ.get("N8N_URL", "").rstrip("/"),
         n8n_api_key=environ.get("N8N_API_KEY", ""),
         workflow_services=tuple(

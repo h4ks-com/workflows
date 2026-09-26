@@ -35,6 +35,7 @@ from workflows.state import Services
 
 SESSION_SECRET = "test-secret"
 SERVICE_TOKEN = "service-token"
+ADMIN_TOKEN = "admin-token"
 EXECUTOR_TOKEN = "executor-token"
 BASE_URL = "https://workflows.example"
 BEANS_URL = "https://beans.example"
@@ -95,6 +96,7 @@ def settings(tmp_path: Path) -> Settings:
         base_url=BASE_URL,
         service_token=SERVICE_TOKEN,
         admin_users=frozenset({"root"}),
+        admin_token=ADMIN_TOKEN,
         n8n_url=N8N_URL,
         executor_token=EXECUTOR_TOKEN,
         beans_url=BEANS_URL,
@@ -176,6 +178,10 @@ def queue_job(session: Session, services: Services, owner: User, credits: int = 
 def session_cookie(user: User) -> str:
     data = b64encode(json.dumps({SESSION_USER_KEY: user.id}).encode())
     return TimestampSigner(SESSION_SECRET).sign(data).decode()
+
+
+def csrf_from(html: str) -> str:
+    return html.split('name="csrf_token" value="')[1].split('"')[0]
 
 
 def log_in(client: TestClient, user: User) -> None:
