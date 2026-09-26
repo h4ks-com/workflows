@@ -1,3 +1,5 @@
+import asyncio
+
 import httpx
 import pytest
 import respx
@@ -53,6 +55,27 @@ async def test_catalog_keeps_the_last_good_types_when_a_provider_fails() -> None
     await catalog.refresh()
 
     assert catalog.get("echo") is not None
+
+
+class HangingProvider(FailingProvider):
+    async def discover(self) -> list[JobType]:
+        if self.failing:
+            await asyncio.Event().wait()
+        return self.job_types
+
+
+async def test_a_hanging_provider_keeps_its_last_types_and_frees_the_refresh(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("workflows.jobtypes.catalog.DISCOVER_TIMEOUT_SECONDS", 0.01)
+    hanging = HangingProvider()
+    catalog = Catalog([hanging, StaticProvider([job_type("song")])])
+    await catalog.refresh()
+
+    hanging.failing = True
+    await catalog.refresh()
+
+    assert [found.name for found in catalog.all()] == ["echo", "song"]
 
 
 async def test_catalog_returns_a_retired_type_for_unknown_names() -> None:

@@ -18,6 +18,7 @@ from workflows.jobtypes.probe import Prober
 logger = logging.getLogger(__name__)
 
 REFRESH_SECONDS = 60.0
+DISCOVER_TIMEOUT_SECONDS = 45.0
 DISPATCH_TIMEOUT_SECONDS = 30.0
 EXECUTOR_AUTH_HEADER = "X-API-Key"
 
@@ -185,6 +186,14 @@ class StaticProvider:
         return list(self._job_types)
 
 
+async def _discover(provider: Provider) -> list[JobType]:
+    try:
+        async with asyncio.timeout(DISCOVER_TIMEOUT_SECONDS):
+            return await provider.discover()
+    except TimeoutError as error:
+        raise ProviderError(f"discovery took over {DISCOVER_TIMEOUT_SECONDS:.0f} s") from error
+
+
 class Catalog:
     """Merges the job types of every provider; the rest of the app reads job types only here."""
 
@@ -196,7 +205,7 @@ class Catalog:
     async def refresh(self) -> None:
         """Ask every provider again, keeping a provider's last good list on `ProviderError`."""
         results = await asyncio.gather(
-            *(provider.discover() for provider in self._providers), return_exceptions=True
+            *(_discover(provider) for provider in self._providers), return_exceptions=True
         )
         for index, result in enumerate(results):
             if isinstance(result, ProviderError):
