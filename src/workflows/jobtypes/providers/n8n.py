@@ -1,7 +1,9 @@
+import json
 import logging
 import re
 from dataclasses import dataclass
 from dataclasses import field
+from dataclasses import replace
 from html import unescape
 from html.parser import HTMLParser
 
@@ -33,6 +35,10 @@ LIST_TIMEOUT_SECONDS = 15.0
 PAGE_SIZE = 100
 WEBHOOK_NODE = "n8n-nodes-base.webhook"
 FORM_NODE = "n8n-nodes-base.formTrigger"
+FORM_PAGE_NODE = "n8n-nodes-base.form"
+IF_NODE = "n8n-nodes-base.if"
+SWITCH_NODE = "n8n-nodes-base.switch"
+FIELD_REFERENCE = re.compile(r"""\$json(?:\.(\w+)|\[["'](\w+)["']\])|\.json\.(\w+)""")
 HTML_TAG = re.compile(r"<[^>]*>")
 NAME_PATTERN = r"^[a-z][a-z0-9-]*$"
 WEBHOOK_PREFIX = "workflows-"
@@ -258,27 +264,203 @@ def _field(element: FormElement, override: FieldOverride, html: FieldHtml) -> Fi
     )
 
 
-def _form(name: str, form_node: N8nNode, manifest: Manifest) -> Form:
+@dataclass(frozen=True)
+class FormPage:
+    node: N8nNode
+    conditions: JsonObject
+
+
+def _elements(page: N8nNode) -> list[FormElement]:
     try:
-        parsed = FormFields.model_validate(form_node.parameters.get("formFields") or {})
+        return FormFields.model_validate(page.parameters.get("formFields") or {}).values
     except ValidationError as error:
-        raise N8nWorkflowError(f"its form cannot be read: {error}") from error
-    shown = [
-        element for element in parsed.values if element.fieldType not in ("html", "hiddenField")
-    ]
-    html_after = _html_after_fields(parsed.values)
-    fields = tuple(
-        _field(
-            element,
-            manifest.fields.get(element.fieldName or "", FieldOverride()),
-            html_after.get(element.fieldName or "", FieldHtml()),
-        )
-        for element in shown
-    )
-    unknown = set(manifest.fields) - {spec.name for spec in fields}
+        raise N8nWorkflowError(f"the form page {page.name} cannot be read: {error}") from error
+
+
+def _page_fields(page: FormPage, manifest: Manifest) -> list[FieldSpec]:
+    elements = _elements(page.node)
+    html_after = _html_after_fields(elements)
+    fields = []
+    for element in elements:
+        if element.fieldType in ("html", "hiddenField"):
+            continue
+        override = manifest.fields.get(element.fieldName or "", FieldOverride())
+        spec = _field(element, override, html_after.get(element.fieldName or "", FieldHtml()))
+        conditions = _all_of(page.conditions, override.show_when or {})
+        fields.append(replace(spec, show_when=conditions or None))
+    return fields
+
+
+def _form(name: str, pages: list[FormPage], manifest: Manifest) -> Form:
+    fields = [spec for page in pages for spec in _page_fields(page, manifest)]
+    names = [spec.name for spec in fields]
+    repeated = sorted({field_name for field_name in names if names.count(field_name) > 1})
+    if repeated:
+        raise N8nWorkflowError(f"its form pages repeat the fields {repeated}")
+    unknown = set(manifest.fields) - set(names)
     if unknown:
         raise N8nWorkflowError(f"its manifest names fields the form lacks: {sorted(unknown)}")
-    return Form(f"{name.replace('-', ' ').title().replace(' ', '')}Params", fields)
+    untested = {key for spec in fields for key in spec.show_when or {}} - set(names)
+    if untested:
+        raise N8nWorkflowError(f"its conditions test fields the form lacks: {sorted(untested)}")
+    return Form(f"{name.replace('-', ' ').title().replace(' ', '')}Params", tuple(fields))
+
+
+def _all_of(first: JsonObject, second: JsonObject) -> JsonObject:
+    for key, condition in second.items():
+        if key in first and first[key] != condition:
+            raise N8nWorkflowError(f"a form page needs two different things of {key}")
+    return {**first, **second}
+
+
+def _either(first: JsonObject, second: JsonObject) -> JsonObject:
+    if first == second:
+        return first
+    values = [_equal_values(first), _equal_values(second)]
+    if values[0] is None or values[1] is None or values[0][0] != values[1][0]:
+        raise N8nWorkflowError("a form page is reached in two ways that test different fields")
+    return {values[0][0]: {"one_of": [*values[0][1], *values[1][1]]}}
+
+
+def _equal_values(conditions: JsonObject) -> tuple[str, list[JsonValue]] | None:
+    if len(conditions) != 1:
+        return None
+    key, condition = next(iter(conditions.items()))
+    if not isinstance(condition, dict):
+        return key, [condition]
+    one_of = condition.get("one_of")
+    return (key, list(one_of)) if isinstance(one_of, list) else None
+
+
+def _negate(conditions: JsonObject) -> JsonObject:
+    if len(conditions) != 1:
+        raise N8nWorkflowError("the false branch of a condition on several fields cannot be read")
+    key, condition = next(iter(conditions.items()))
+    if not isinstance(condition, dict):
+        return {key: {"not": condition}}
+    match next(iter(condition.items())):
+        case ("not", value):
+            return {key: value}
+        case ("one_of", values):
+            return {key: {"not_one_of": values}}
+        case ("not_one_of", values):
+            return {key: {"one_of": values}}
+        case ("empty", empty):
+            return {key: {"empty": not empty}}
+    raise N8nWorkflowError(f"the condition on {key} cannot be negated")
+
+
+def _tested_field(left: JsonValue) -> str:
+    found = FIELD_REFERENCE.search(str(left))
+    if found is None:
+        raise N8nWorkflowError(f"a form condition tests {left}, which is not a form field")
+    return next(group for group in found.groups() if group)
+
+
+def _condition(item: JsonObject) -> tuple[str, JsonValue]:
+    operator = item.get("operator")
+    operation = operator.get("operation") if isinstance(operator, dict) else None
+    right = item.get("rightValue")
+    match operation:
+        case "equals" | "true" | "false":
+            value: JsonValue = right if operation == "equals" else operation == "true"
+        case "notEquals":
+            value = {"not": right}
+        case "empty" | "notEmpty":
+            value = {"empty": operation == "empty"}
+        case _:
+            raise N8nWorkflowError(f"the form condition {operation} is not supported")
+    return _tested_field(item.get("leftValue")), value
+
+
+def _conditions(block: JsonValue) -> JsonObject:
+    items = block.get("conditions") if isinstance(block, dict) else None
+    if not isinstance(items, list) or not items:
+        raise N8nWorkflowError("a form condition has no rules")
+    pairs = [_condition(item) for item in items if isinstance(item, dict)]
+    if isinstance(block, dict) and block.get("combinator") == "or":
+        found: JsonObject = {}
+        for key, value in pairs:
+            found = _either(found, {key: value}) if found else {key: value}
+        return found
+    merged: JsonObject = {}
+    for key, value in pairs:
+        merged = _all_of(merged, {key: value})
+    return merged
+
+
+def _branches(node: N8nNode) -> list[JsonObject]:
+    """Return the show conditions each output of an If or Switch node adds."""
+    if node.type == IF_NODE:
+        condition = _conditions(node.parameters.get("conditions"))
+        return [condition, _negate(condition)]
+    rules = node.parameters.get("rules")
+    values = rules.get("values") if isinstance(rules, dict) else None
+    branches = [
+        _conditions(rule.get("conditions")) for rule in _json_list(values) if isinstance(rule, dict)
+    ]
+    options = node.parameters.get("options")
+    if isinstance(options, dict) and options.get("fallbackOutput") == "extra":
+        branches.append(_fallback(branches))
+    return branches
+
+
+def _fallback(branches: list[JsonObject]) -> JsonObject:
+    found: JsonObject = {}
+    for branch in branches:
+        found = _either(found, branch) if found else branch
+    return _negate(found)
+
+
+def _outputs(workflow: N8nWorkflow, name: str) -> list[list[str]]:
+    main = workflow.connections.get(name)
+    outputs = main.get("main") if isinstance(main, dict) else None
+    return [
+        [str(link["node"]) for link in _json_list(output) if isinstance(link, dict)]
+        for output in _json_list(outputs)
+    ]
+
+
+def _json_list(value: JsonValue) -> list[JsonValue]:
+    return value if isinstance(value, list) else []
+
+
+def _pages(workflow: N8nWorkflow, trigger: N8nNode) -> list[FormPage]:
+    """Walk from the trigger through If, Switch and Form page nodes to every form page."""
+    nodes = {node.name: node for node in workflow.nodes if not node.disabled}
+    found: dict[str, JsonObject] = {}
+    order = [trigger.name]
+    stack: list[tuple[str, JsonObject]] = [(trigger.name, {})]
+    seen: set[str] = set()
+    while stack:
+        name, conditions = stack.pop()
+        key = json.dumps([name, conditions], sort_keys=True)
+        if key in seen:
+            continue
+        seen.add(key)
+        node = nodes[name]
+        branches = _branches(node) if node.type in (IF_NODE, SWITCH_NODE) else []
+        for index, targets in reversed(list(enumerate(_outputs(workflow, name)))):
+            added = _all_of(conditions, branches[index]) if index < len(branches) else conditions
+            for target in reversed(targets):
+                stack.extend(_visit(nodes.get(target), added, found, order))
+    return [FormPage(nodes[name], found.get(name, {})) for name in order]
+
+
+def _visit(
+    node: N8nNode | None, conditions: JsonObject, found: dict[str, JsonObject], order: list[str]
+) -> list[tuple[str, JsonObject]]:
+    if node is None or node.type not in (IF_NODE, SWITCH_NODE, FORM_PAGE_NODE):
+        return []
+    if node.type == FORM_PAGE_NODE:
+        if node.parameters.get("operation") == "completion":
+            return []
+        if node.name in found:
+            found[node.name] = _either(found[node.name], conditions)
+            return []
+        found[node.name] = conditions
+        order.append(node.name)
+    return [(node.name, conditions)]
 
 
 def _name_from_path(path: str) -> str:
@@ -362,7 +544,7 @@ class N8nProvider:
         name = _name_from_path(path)
         title = form_node.parameters.get("formTitle")
         description = form_node.parameters.get("formDescription")
-        form = _form(name, form_node, manifest)
+        form = _form(name, _pages(workflow, form_node), manifest)
         price = form_price(form, manifest.price)
         job_type = JobType(
             name=name,

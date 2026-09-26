@@ -33,6 +33,12 @@ Every field needs a Field Name, which becomes the param name the executor receiv
 
 Required fields are required on the site. A default value pre-fills the field; for a dropdown it must match an option. Multiselect dropdowns, checkboxes with several options and password fields are refused.
 
+## Form pages
+
+Fields that only apply to some answers go on a later page. Connect the Form Trigger to If or Switch nodes and those to Form nodes with the Next Form Page operation; each page can lead to more If, Switch or Form nodes. The site shows every page as one form, and a page's fields appear only when the answers before them meet the conditions on the way there. A page field that is required is required only while it shows, and a hidden field reaches the executor as `null`.
+
+Conditions test earlier fields with `{{ $json.field }}` and these string operations: is equal to, is not equal to, is empty and is not empty; a checkbox field uses the boolean true or false. An If node combines its rules with AND, or with OR when every rule compares the same field with is equal to. A Switch in Rules mode gives each output its rule; with the fallback output set to Extra Output, that output takes every other value. The false branch of an If only works when its condition tests one field. Each field name appears on one page only.
+
 ## The settings
 
 The smallest settings are just the price:

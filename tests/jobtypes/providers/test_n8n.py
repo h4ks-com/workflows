@@ -6,14 +6,19 @@ import httpx
 import pytest
 import respx
 from pydantic import JsonValue
+from pydantic import ValidationError
 
 from workflows.db import JsonObject
 from workflows.jobtypes.catalog import Catalog
 from workflows.jobtypes.catalog import HttpExecutor
+from workflows.jobtypes.catalog import JobType
 from workflows.jobtypes.catalog import ProviderError
 from workflows.jobtypes.forms import form_from_schema
 from workflows.jobtypes.providers.builtin import builtin_job_types
+from workflows.jobtypes.providers.n8n import N8nNode
 from workflows.jobtypes.providers.n8n import N8nProvider
+from workflows.jobtypes.providers.n8n import N8nWorkflowError
+from workflows.jobtypes.providers.n8n import _branches
 
 N8N = "https://n8n.test"
 LIST_URL = f"{N8N}/api/v1/workflows"
@@ -332,3 +337,199 @@ async def test_discover_raises_provider_error_when_n8n_fails(
 
     with pytest.raises(ProviderError):
         await provider().discover()
+
+
+KIND: JsonValue = {
+    "fieldType": "dropdown",
+    "fieldName": "kind",
+    "fieldLabel": "Kind",
+    "fieldOptions": {"values": [{"option": "photo"}, {"option": "drawing"}, {"option": "text"}]},
+}
+
+
+def field(name: str, required: bool = False, default: str | None = None) -> JsonValue:
+    return {
+        "fieldType": "text",
+        "fieldName": name,
+        "fieldLabel": name.title(),
+        "requiredField": required,
+        "defaultValue": default,
+    }
+
+
+def page(name: str, fields: list[JsonValue]) -> JsonObject:
+    return {
+        "name": name,
+        "type": "n8n-nodes-base.form",
+        "parameters": {"formFields": {"values": fields}},
+    }
+
+
+def rule(operation: str, right: JsonValue = None, left: str = "={{ $json.kind }}") -> JsonObject:
+    return {
+        "leftValue": left,
+        "rightValue": right,
+        "operator": {"type": "string", "operation": operation},
+    }
+
+
+def if_node(*rules: JsonObject, combinator: str = "and") -> JsonObject:
+    return {
+        "name": "Kind?",
+        "type": "n8n-nodes-base.if",
+        "parameters": {"conditions": {"conditions": list(rules), "combinator": combinator}},
+    }
+
+
+def paged(extra: list[JsonObject], connections: dict[str, list[list[str]]]) -> JsonObject:
+    workflow = with_form_fields([KIND])
+    trigger = node(workflow, "n8n-nodes-base.formTrigger")
+    nodes = workflow["nodes"]
+    assert isinstance(nodes, list)
+    nodes.extend(extra)
+    links = workflow["connections"]
+    assert isinstance(links, dict)
+    for source, outputs in connections.items():
+        name = str(trigger["name"]) if source == "trigger" else source
+        links[name] = {
+            "main": [
+                [{"node": target, "type": "main", "index": 0} for target in output]
+                for output in outputs
+            ]
+        }
+    return workflow
+
+
+async def discover_one(workflow: JsonObject) -> tuple[N8nProvider, list[JobType]]:
+    respx.get(LIST_URL).respond(json={"data": [workflow], "nextCursor": None})
+    n8n = provider()
+    return n8n, await n8n.discover()
+
+
+def shows(job_type: JobType) -> dict[str, JsonValue]:
+    return {spec.name: spec.show_when for spec in job_type.form.fields}
+
+
+@respx.mock
+async def test_if_branches_show_their_pages_only_for_their_choice() -> None:
+    workflow = paged(
+        [
+            if_node(rule("equals", "photo")),
+            page("Photo", [field("camera")]),
+            page("Other", [field("style")]),
+        ],
+        {"trigger": [["Kind?"]], "Kind?": [["Photo"], ["Other"]]},
+    )
+
+    _, [job_type] = await discover_one(workflow)
+
+    assert shows(job_type) == {
+        "kind": None,
+        "camera": {"kind": "photo"},
+        "style": {"kind": {"not": "photo"}},
+    }
+
+
+@respx.mock
+async def test_switch_outputs_and_fallback_become_conditions() -> None:
+    switch: JsonObject = {
+        "name": "Kind?",
+        "type": "n8n-nodes-base.switch",
+        "parameters": {
+            "rules": {
+                "values": [
+                    {"conditions": {"conditions": [rule("equals", "photo")]}},
+                    {"conditions": {"conditions": [rule("equals", "drawing")]}},
+                ]
+            },
+            "options": {"fallbackOutput": "extra"},
+        },
+    }
+    workflow = paged(
+        [
+            switch,
+            page("Photo", [field("camera")]),
+            page("Drawing", [field("pen")]),
+            page("Rest", [field("font")]),
+        ],
+        {"trigger": [["Kind?"]], "Kind?": [["Photo"], ["Drawing"], ["Rest"]]},
+    )
+
+    _, [job_type] = await discover_one(workflow)
+
+    assert shows(job_type) == {
+        "kind": None,
+        "camera": {"kind": "photo"},
+        "pen": {"kind": "drawing"},
+        "font": {"kind": {"not_one_of": ["photo", "drawing"]}},
+    }
+
+
+@respx.mock
+async def test_a_page_reached_two_ways_shows_for_either() -> None:
+    workflow = paged(
+        [
+            if_node(rule("equals", "photo"), rule("equals", "drawing"), combinator="or"),
+            page("Picture", [field("size")]),
+        ],
+        {"trigger": [["Kind?"]], "Kind?": [["Picture"], []]},
+    )
+
+    _, [job_type] = await discover_one(workflow)
+
+    assert shows(job_type)["size"] == {"kind": {"one_of": ["photo", "drawing"]}}
+
+
+@respx.mock
+async def test_page_fields_are_required_only_while_shown() -> None:
+    workflow = paged(
+        [
+            if_node(rule("equals", "photo")),
+            page("Photo", [field("camera", required=True), field("lens", default="50mm")]),
+        ],
+        {"trigger": [["Kind?"]], "Kind?": [["Photo"], []]},
+    )
+    _, [job_type] = await discover_one(workflow)
+
+    hidden = job_type.form.validate({"kind": "text", "lens": "50mm"})
+
+    assert (hidden["camera"], hidden["lens"]) == (None, None)
+    with pytest.raises(ValidationError, match="fill in camera"):
+        job_type.form.validate({"kind": "photo"})
+    with pytest.raises(ValidationError, match="camera needs kind photo"):
+        job_type.form.validate({"kind": "text", "camera": "leica"})
+    assert job_type.form.validate({"kind": "photo", "camera": "leica"})["lens"] == "50mm"
+
+
+@pytest.mark.parametrize(
+    ("change", "error"),
+    [
+        ({"Kind?": if_node(rule("contains", "pho"))}, "contains is not supported"),
+        ({"Kind?": if_node(rule("equals", "photo", left="={{ $now }}"))}, "not a form field"),
+        ({"Kind?": if_node(rule("equals", "photo", left="={{ $json.mood }}"))}, "lacks: ['mood']"),
+        ({"Photo": page("Photo", [KIND])}, "repeat the fields ['kind']"),
+    ],
+)
+@respx.mock
+async def test_unreadable_pages_skip_the_workflow(
+    change: dict[str, JsonObject], error: str
+) -> None:
+    parts = {
+        "Kind?": if_node(rule("equals", "photo")),
+        "Photo": page("Photo", [field("camera")]),
+    } | change
+    workflow = paged(list(parts.values()), {"trigger": [["Kind?"]], "Kind?": [["Photo"], []]})
+
+    n8n, found = await discover_one(workflow)
+
+    assert found == []
+    assert error in n8n.errors[str(IMAGE_WORKFLOW["name"])]
+
+
+def test_the_false_branch_of_an_and_on_two_fields_cannot_be_read() -> None:
+    both = N8nNode.model_validate(
+        if_node(rule("equals", "photo"), rule("notEmpty", left="={{ $json.note }}"))
+    )
+
+    with pytest.raises(N8nWorkflowError, match="several fields"):
+        _branches(both)

@@ -1,8 +1,11 @@
 import pytest
+from pydantic import JsonValue
 from pydantic import ValidationError
 
 from workflows.jobtypes.forms import FieldSpec
 from workflows.jobtypes.forms import Form
+from workflows.jobtypes.forms import condition_holds
+from workflows.jobtypes.forms import describe_condition
 from workflows.jobtypes.forms import form_from_schema
 
 FORM = Form(
@@ -71,3 +74,19 @@ def test_a_shown_field_is_accepted_when_its_condition_holds() -> None:
 
 def test_the_schema_round_trips_through_the_json_schema_driver() -> None:
     assert form_from_schema(FORM.json_schema()).fields == FORM.fields
+
+
+@pytest.mark.parametrize(
+    ("condition", "value", "holds", "words"),
+    [
+        ("a", "a", True, "mode a"),
+        ({"not": "a"}, "b", True, "mode other than a"),
+        ({"one_of": ["a", "b"]}, "c", False, "mode a or b"),
+        ({"not_one_of": ["a", "b"]}, "c", True, "mode other than a or b"),
+        ({"empty": True}, "", True, "mode empty"),
+        ({"empty": False}, None, False, "mode filled in"),
+    ],
+)
+def test_show_conditions(condition: JsonValue, value: str | None, holds: bool, words: str) -> None:
+    assert condition_holds(condition, value) is holds
+    assert describe_condition("mode", condition) == words

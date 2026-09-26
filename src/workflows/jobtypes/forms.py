@@ -56,18 +56,72 @@ class FieldSpec:
     previews: dict[str, str] | None = None
 
 
+def _is_empty(value: JsonValue) -> bool:
+    return value is None or value == ""
+
+
+def condition_holds(condition: JsonValue, value: JsonValue) -> bool:
+    """Tell whether a field's value meets one show condition.
+
+    A condition is a plain value (equals) or one of `{"not": v}`, `{"one_of": [...]}`,
+    `{"not_one_of": [...]}` and `{"empty": true|false}`.
+    """
+    if not isinstance(condition, dict):
+        return value == condition
+    if "not" in condition:
+        return value != condition["not"]
+    if "one_of" in condition:
+        return value in _as_list(condition["one_of"])
+    if "not_one_of" in condition:
+        return value not in _as_list(condition["not_one_of"])
+    return _is_empty(value) == bool(condition.get("empty"))
+
+
+def describe_condition(field: str, condition: JsonValue) -> str:
+    """Say in words what a show condition asks of a field."""
+    if not isinstance(condition, dict):
+        return f"{field} {condition}"
+    if "not" in condition:
+        return f"{field} other than {condition['not']}"
+    if "one_of" in condition:
+        return f"{field} {' or '.join(map(str, _as_list(condition['one_of'])))}"
+    if "not_one_of" in condition:
+        return f"{field} other than {' or '.join(map(str, _as_list(condition['not_one_of'])))}"
+    return f"{field} {'empty' if condition.get('empty') else 'filled in'}"
+
+
+def _as_list(value: JsonValue) -> list[JsonValue]:
+    return value if isinstance(value, list) else [value]
+
+
+@dataclass(frozen=True)
+class ShowRule:
+    name: str
+    label: str
+    required: bool
+    default: JsonValue
+    conditions: JsonObject
+
+
 class FormParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    show_rules: ClassVar[tuple[tuple[str, str, JsonObject], ...]] = ()
+    show_rules: ClassVar[tuple[ShowRule, ...]] = ()
 
     @model_validator(mode="after")
     def only_set_when_shown(self) -> Self:
-        for name, label, condition in self.show_rules:
-            if getattr(self, name) is None:
-                continue
-            for key, value in condition.items():
-                if getattr(self, key) != value:
-                    raise ValueError(f"{label.lower()} needs {key} {value}")
+        for rule in self.show_rules:
+            value = getattr(self, rule.name)
+            unmet = [
+                describe_condition(key, condition)
+                for key, condition in rule.conditions.items()
+                if not condition_holds(condition, getattr(self, key))
+            ]
+            if unmet and value is not None and value != rule.default:
+                raise ValueError(f"{rule.label.lower()} needs {unmet[0]}")
+            if unmet:
+                setattr(self, rule.name, None)
+            elif rule.required and _is_empty(value):
+                raise ValueError(f"fill in {rule.label.lower()}")
         return self
 
 
@@ -80,9 +134,13 @@ def _one_of(values: tuple[str, ...]) -> Callable[[str | None], str | None]:
     return check
 
 
+def _always_required(spec: FieldSpec) -> bool:
+    return spec.required and not spec.show_when
+
+
 def _annotation(spec: FieldSpec) -> object:
     value_type = VALUE_TYPES[spec.value_type]
-    nullable = not spec.required and spec.default is None
+    nullable = spec.show_when is not None or (not spec.required and spec.default is None)
     annotation = value_type | None if nullable else value_type
     if spec.enum is not None:
         return Annotated[annotation, AfterValidator(_one_of(spec.enum))]
@@ -107,7 +165,7 @@ def _schema_extra(spec: FieldSpec) -> JsonDict:
 def _field_info(spec: FieldSpec) -> object:
     lengths = spec.value_type != "url"
     return Field(
-        ... if spec.required else spec.default,
+        ... if _always_required(spec) else spec.default,
         title=spec.label,
         description=spec.description,
         ge=spec.minimum,
@@ -130,7 +188,9 @@ class Form:
         definitions = {spec.name: (_annotation(spec), _field_info(spec)) for spec in self.fields}
         model = create_model(self.title, __base__=FormParams, **definitions)  # type: ignore[call-overload]
         model.show_rules = tuple(
-            (spec.name, spec.label, spec.show_when) for spec in self.fields if spec.show_when
+            ShowRule(spec.name, spec.label, spec.required, spec.default, spec.show_when)
+            for spec in self.fields
+            if spec.show_when
         )
         return model
 

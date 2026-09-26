@@ -122,13 +122,28 @@
 
   // A field that only makes sense for some choices declares them; we hide and disable it otherwise,
   // so the form leaves it out and the value comes back when the choice does.
+  function fieldValue(form, name) {
+    const input = form.elements[name];
+    if (!input || input.disabled) return null;
+    if (input.type === "checkbox") return input.checked;
+    return input.value;
+  }
+
+  function conditionHolds(condition, value) {
+    if (condition === null || typeof condition !== "object") return String(value) === String(condition);
+    if ("not" in condition) return String(value) !== String(condition.not);
+    if ("one_of" in condition) return condition.one_of.map(String).includes(String(value));
+    if ("not_one_of" in condition) return !condition.not_one_of.map(String).includes(String(value));
+    return (value === null || value === "") === Boolean(condition.empty);
+  }
+
   function applyShowWhen() {
     document.querySelectorAll("[data-show-when]").forEach((field) => {
       const form = field.closest("form");
       const rules = JSON.parse(field.dataset.showWhen);
-      const visible = Object.entries(rules).every(([name, value]) => form.elements[name]?.value === value);
+      const visible = Object.entries(rules).every(([name, condition]) => conditionHolds(condition, fieldValue(form, name)));
       field.hidden = !visible;
-      field.querySelectorAll("input, textarea").forEach((input) => { input.disabled = !visible; });
+      field.querySelectorAll("input, textarea, select").forEach((input) => { input.disabled = !visible; });
     });
   }
   document.addEventListener("DOMContentLoaded", applyShowWhen);
