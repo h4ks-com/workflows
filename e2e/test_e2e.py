@@ -38,20 +38,21 @@ def dev_login(client: httpx.Client) -> str:
     return username
 
 
-def song_params(prompt: str, seconds: int = 60) -> dict[str, object]:
-    return {"prompt": prompt, "seconds": seconds, "model": "ace-step"}
+def song_params(prompt: str, seconds: int = 60) -> dict[str, str]:
+    return {"prompt": prompt, "seconds": str(seconds), "model": "ace-step"}
 
 
 def song_quote_credits(seconds: int = 60) -> int:
     return round(0.3 * seconds + 60)
 
 
-def submit_song(client: httpx.Client, prompt: str, seconds: int = 60) -> JsonObject:
-    response = client.post(
-        "/api/jobs", json={"type": "song", "params": song_params(prompt, seconds)}
-    )
-    response.raise_for_status()
-    return cast(JsonObject, response.json())
+def submit_song(client: httpx.Client, prompt: str, seconds: int = 60) -> int:
+    page = client.get("/submit/song")
+    csrf_token = page.text.split('name="csrf_token" value="')[1].split('"')[0]
+    form = {"csrf_token": csrf_token, **song_params(prompt, seconds)}
+    response = client.post("/submit/song", data=form, follow_redirects=False)
+    assert response.is_redirect
+    return int(response.headers["location"].removeprefix("/jobs/"))
 
 
 def poll_job(client: httpx.Client, job_id: int, timeout: float = JOB_TIMEOUT_SECONDS) -> JsonObject:
@@ -108,9 +109,7 @@ def test_quote_song(client: httpx.Client) -> None:
 def test_job_succeeds_and_captures_credits(client: httpx.Client) -> None:
     dev_login(client)
     before = balance(client)
-    job = submit_song(client, "a song about cats")
-    assert job["status"] == "queued"
-    finished = poll_job(client, int(job["id"]))
+    finished = poll_job(client, submit_song(client, "a song about cats"))
     assert finished["status"] == "succeeded"
     assert finished["result"]["files"]
     assert balance(client) == before - song_quote_credits()
@@ -119,8 +118,7 @@ def test_job_succeeds_and_captures_credits(client: httpx.Client) -> None:
 def test_job_fails_and_refunds_credits(client: httpx.Client) -> None:
     dev_login(client)
     before = balance(client)
-    job = submit_song(client, "FAIL this song")
-    finished = poll_job(client, int(job["id"]))
+    finished = poll_job(client, submit_song(client, "FAIL this song"))
     assert finished["status"] == "failed"
     assert finished["error"]
     assert balance(client) == before
@@ -133,8 +131,8 @@ def test_only_one_job_runs_at_a_time(client: httpx.Client) -> None:
     both_running_at_once = False
     deadline = time.monotonic() + JOB_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
-        status_first = client.get(f"/api/jobs/{first['id']}").json()["status"]
-        status_second = client.get(f"/api/jobs/{second['id']}").json()["status"]
+        status_first = client.get(f"/api/jobs/{first}").json()["status"]
+        status_second = client.get(f"/api/jobs/{second}").json()["status"]
         if status_first == "running" and status_second == "running":
             both_running_at_once = True
         if status_first in TERMINAL_STATUSES and status_second in TERMINAL_STATUSES:
@@ -147,9 +145,9 @@ def test_only_one_job_runs_at_a_time(client: httpx.Client) -> None:
 
 def test_executor_callback_rejects_wrong_token(client: httpx.Client) -> None:
     dev_login(client)
-    job = submit_song(client, "song for a bad callback")
+    job_id = submit_song(client, "song for a bad callback")
     response = client.post(
-        f"/api/jobs/{job['id']}/events",
+        f"/api/jobs/{job_id}/events",
         json={"kind": "log", "message": "hello"},
         headers={"Authorization": "Bearer wrong-token"},
     )
