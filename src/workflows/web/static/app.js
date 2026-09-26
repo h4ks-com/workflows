@@ -214,6 +214,31 @@
   }
   document.addEventListener("htmx:afterSwap", loadModelViewer);
 
+  // A model with animations gets one button per clip; the first clip plays as soon as it loads.
+  function showClips(viewer) {
+    const bar = viewer.nextElementSibling;
+    const clips = viewer.availableAnimations || [];
+    if (!bar?.classList.contains("clips") || !clips.length) return;
+    const play = (name) => {
+      viewer.animationName = name;
+      viewer.play();
+      bar.querySelectorAll("button").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.clip === name)));
+    };
+    bar.replaceChildren(...clips.map((name) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.clip = name;
+      button.textContent = `play ${name}`;
+      button.addEventListener("click", () => play(name));
+      return button;
+    }));
+    bar.hidden = false;
+    play(clips[0]);
+  }
+  document.addEventListener("load", (event) => {
+    if (event.target.tagName === "MODEL-VIEWER") showClips(event.target);
+  }, true);
+
   document.addEventListener("DOMContentLoaded", () => {
     connectQueueStream();
     connectJobStream();
