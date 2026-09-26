@@ -35,13 +35,10 @@ from workflows.jobtypes.catalog import JobType
 from workflows.jobtypes.catalog import Quote
 from workflows.runs.bus import BusEvent
 from workflows.runs.bus import job_topic
-from workflows.runs.eta import Estimator
 from workflows.runs.jobs import ExecutorEvent
 from workflows.runs.jobs import announce
 from workflows.runs.jobs import apply_event
 from workflows.runs.jobs import cancel
-from workflows.runs.jobs import create_job
-from workflows.runs.jobs import enqueue
 from workflows.runs.jobs import ensure_available
 from workflows.runs.jobs import is_terminal_repeat
 from workflows.runs.jobs import token_matches
@@ -124,18 +121,6 @@ async def list_jobs(
 @router.get("/jobs/{job_id}")
 async def get_job(job_id: int, session: Db, services: AppServices) -> JobDetailView:
     return job_detail_view(session, services, job_id)
-
-
-@router.post("/jobs", status_code=status.HTTP_201_CREATED)
-async def submit_job(
-    body: QuoteRequest, user: LoggedInUser, session: Db, services: AppServices
-) -> JobView:
-    job_type, params, priced = await price_request(services, body)
-    job = create_job(session, job_type, params, priced, user)
-    enqueue(session, job, user)
-    session.commit()
-    announce(services.bus, job)
-    return job_view(job, job_type, Estimator(session).slot(job))
 
 
 @router.post("/jobs/{job_id}/cancel")

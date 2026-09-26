@@ -14,6 +14,7 @@ from conftest import BASE_URL
 from conftest import SONG_URL
 from conftest import FakeProber
 from conftest import assert_ledger_matches
+from conftest import csrf_from
 from conftest import make_job
 from conftest import make_user
 from conftest import queue_job
@@ -33,10 +34,10 @@ from workflows.settings import FREE_DAILY_CREDITS
 from workflows.state import Services
 
 TOMORROW = datetime.now(UTC) + timedelta(days=1)
-PARODY = {"type": "parody", "params": {"url": SONG_URL}}
+PARODY = {"url": SONG_URL}
 PARODY_QUOTE = 240
 LONG_SONG_URL = "https://youtube.example/watch?v=long"
-LONG_PARODY = {"type": "parody", "params": {"url": LONG_SONG_URL}}
+LONG_PARODY = {"url": LONG_SONG_URL}
 
 
 def test_daily_grant_sets_the_free_balance_once_per_day(
@@ -142,13 +143,18 @@ def test_admin_adjust_cannot_go_negative(session: Session) -> None:
     assert user.paid_credits == 30
 
 
-def api_client(app: FastAPI, user: User) -> httpx.AsyncClient:
+def web_client(app: FastAPI, user: User) -> httpx.AsyncClient:
     return httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url=BASE_URL,
         cookies={"session": session_cookie(user)},
-        headers={"X-Requested-With": "fetch"},
     )
+
+
+async def submit_parody(client: httpx.AsyncClient, params: dict[str, str]) -> httpx.Response:
+    page = await client.get("/submit/parody")
+    form = {"csrf_token": csrf_from(page.text), **params}
+    return await client.post("/submit/parody", data=form, follow_redirects=False)
 
 
 def free_grants(session: Session, user: User) -> int:
@@ -164,12 +170,12 @@ async def test_concurrent_submissions_each_pay_their_quote(
     user = make_user(session, "alice", paid_credits=1000)
     prober.delay_seconds = 0.1
 
-    async with api_client(app, user) as client:
+    async with web_client(app, user) as client:
         first, second = await asyncio.gather(
-            client.post("/api/jobs", json=PARODY), client.post("/api/jobs", json=PARODY)
+            submit_parody(client, PARODY), submit_parody(client, PARODY)
         )
 
-    assert (first.status_code, second.status_code) == (201, 201)
+    assert (first.status_code, second.status_code) == (303, 303)
     session.refresh(user)
     assert user.free_credits + user.paid_credits == 1500 - 2 * PARODY_QUOTE
     assert free_grants(session, user) == 1
@@ -188,12 +194,12 @@ async def test_topup_during_a_probe_is_kept(
         with services.sessions.begin() as other:
             topup(other, other.get_one(User, user.id), 3, "txn-1")
 
-    async with api_client(app, user) as client:
+    async with web_client(app, user) as client:
         response, _ = await asyncio.gather(
-            client.post("/api/jobs", json=LONG_PARODY), credit_during_probe()
+            submit_parody(client, LONG_PARODY), credit_during_probe()
         )
 
-    assert response.status_code == 201
+    assert response.status_code == 303
     session.refresh(user)
     assert (user.free_credits, user.paid_credits) == (0, 200 + 300 - (600 - 500))
     assert_ledger_matches(session, user)

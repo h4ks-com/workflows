@@ -13,7 +13,6 @@ from starlette.requests import Request
 from conftest import FETCH_HEADERS
 from conftest import SERVICE_TOKEN
 from conftest import SONG_URL
-from conftest import FakeProber
 from conftest import assert_ledger_matches
 from conftest import log_in
 from conftest import make_job
@@ -105,51 +104,13 @@ def test_quote_rejects_bad_requests(
         assert response.json()["detail"] == detail
 
 
-def test_submit_reserves_credits_and_queues(
-    client: TestClient, session: Session, services: Services
-) -> None:
-    user = make_user(session, "alice")
-    log_in(client, user)
-
-    response = client.post("/api/jobs", json=SONG)
-
-    assert response.status_code == 201
-    job = response.json()
-    assert (job["status"], job["owner"], job["quote"], job["position"]) == (
-        "queued",
-        "alice",
-        105,
-        1,
-    )
-    assert job["eta_seconds"] == 105
-    session.refresh(user)
-    assert user.free_credits == 500 - 105
-
-
-def test_submit_needs_a_user(client: TestClient) -> None:
-    assert client.post("/api/jobs", json=SONG).status_code == 401
-
-
-def test_submit_fails_without_enough_credits(
-    client: TestClient, session: Session, prober: FakeProber
-) -> None:
+def test_the_web_form_is_the_only_way_to_submit(client: TestClient, session: Session) -> None:
     log_in(client, make_user(session, "alice"))
-    prober.durations[LONG_SONG_URL] = 400.0
 
-    response = client.post("/api/jobs", json={"type": "parody", "params": {"url": LONG_SONG_URL}})
+    as_user = client.post("/api/jobs", json=SONG)
+    as_service = client.post("/api/clients/jobs", json=SONG, headers=SERVICE_HEADERS)
 
-    assert response.status_code == 402
-    assert response.json()["detail"] == "this needs 600 credits and you have 500"
-
-
-def test_the_service_token_cannot_submit_for_a_user(client: TestClient, session: Session) -> None:
-    make_user(session, "alice")
-
-    response = client.post(
-        "/api/jobs", json={**SONG, "on_behalf_of": "alice"}, headers=SERVICE_HEADERS
-    )
-
-    assert response.status_code == 401
+    assert (as_user.status_code, as_service.status_code) == (405, 404)
 
 
 def test_session_posts_need_the_fetch_header(

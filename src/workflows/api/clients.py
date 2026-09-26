@@ -16,33 +16,19 @@ from starlette.responses import Response
 
 from workflows.accounts.auth import csrf_token
 from workflows.accounts.auth import require_service
-from workflows.accounts.ledger import InsufficientCreditsError
 from workflows.accounts.ledger import grant_daily
 from workflows.api.drafts import DraftView
 from workflows.api.drafts import share_form
 from workflows.api.routes import QuoteRequest
-from workflows.api.routes import price_request
-from workflows.api.views import JobView
-from workflows.api.views import job_view
 from workflows.db import ExternalIdentity
-from workflows.db import Job
-from workflows.db import JobStatus
 from workflows.db import LinkRequest
 from workflows.db import Subscription
 from workflows.db import User
 from workflows.db import utcnow
-from workflows.jobtypes.catalog import JobType
-from workflows.runs.jobs import announce
-from workflows.runs.jobs import create_job
-from workflows.runs.jobs import enqueue
 from workflows.runs.jobs import hash_token
 from workflows.runs.webhooks import Subscribe
-from workflows.runs.webhooks import Webhook
 from workflows.state import AppServices
 from workflows.state import Db
-from workflows.state import Services
-from workflows.web.render import TOPUP_HINT
-from workflows.web.render import Page
 from workflows.web.render import PageCtx
 from workflows.web.render import TemplateValue
 from workflows.web.render import login_redirect
@@ -61,18 +47,6 @@ IdentityStr = Annotated[
         description="Opaque identity the client chooses, for example 'chat:alice'.",
     ),
 ]
-
-
-class ClientJobRequest(QuoteRequest):
-    identity: IdentityStr | None = Field(
-        None, description="Identity acting for this job, or null for an anonymous submission."
-    )
-    webhook: Webhook | None = Field(None, description="Where to post every status change.")
-
-
-class ClientJobView(BaseModel):
-    job: JobView = Field(description="The created job.")
-    confirm_url: str | None = Field(None, description="Confirm this job by logging in here.")
 
 
 class ClientLinkRequest(BaseModel):
@@ -104,44 +78,6 @@ def _link_identity(session: Session, identity: str, user: User) -> None:
         session.add(ExternalIdentity(identity=identity, user_id=user.id))
     elif existing.user_id != user.id:
         raise HTTPException(status.HTTP_409_CONFLICT, f"{identity} is linked to another account")
-
-
-def _submit_for_linked_user(
-    session: Session, services: Services, job: Job, owner: User
-) -> ClientJobView:
-    try:
-        enqueue(session, job, owner)
-    except InsufficientCreditsError as error:
-        session.rollback()
-        topup_url = f"{services.settings.base_url}/wallet"
-        raise HTTPException(
-            status.HTTP_402_PAYMENT_REQUIRED, f"{error}; top up at {topup_url}"
-        ) from error
-    session.commit()
-    announce(services.bus, job)
-    return ClientJobView(job=job_view(job, services.catalog.find(job.type)), confirm_url=None)
-
-
-def _submit_awaiting_confirmation(
-    session: Session, services: Services, job: Job, job_type: JobType
-) -> ClientJobView:
-    token = secrets.token_urlsafe(32)
-    job.confirm_token_hash = hash_token(token)
-    session.commit()
-    confirm_url = f"{services.settings.base_url}/confirm/{token}"
-    return ClientJobView(job=job_view(job, job_type), confirm_url=confirm_url)
-
-
-@router.post("/jobs", status_code=status.HTTP_201_CREATED)
-async def submit_job(body: ClientJobRequest, session: Db, services: AppServices) -> ClientJobView:
-    job_type, params, priced = await price_request(services, body)
-    job = create_job(session, job_type, params, priced, None)
-    job.identity = body.identity
-    job.webhook = body.webhook.model_dump(mode="json") if body.webhook else None
-    linked_user = _linked_user(session, body.identity) if body.identity else None
-    if linked_user is not None:
-        return _submit_for_linked_user(session, services, job, linked_user)
-    return _submit_awaiting_confirmation(session, services, job, job_type)
 
 
 @router.post("/drafts", status_code=status.HTTP_201_CREATED)
@@ -198,58 +134,12 @@ async def delete_subscription(url: HttpUrl, session: Db) -> None:
     session.commit()
 
 
-def _job_by_confirm_token(session: Session, token: str) -> Job:
-    digest = hash_token(token)
-    job = session.scalar(select(Job).where(Job.confirm_token_hash == digest))
-    if job is None or job.status != JobStatus.AWAITING_CONFIRMATION:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "this confirm link is no longer valid")
-    return job
-
-
 def _link_request_by_token(session: Session, token: str) -> LinkRequest:
     digest = hash_token(token)
     link_request = session.scalar(select(LinkRequest).where(LinkRequest.token_hash == digest))
     if link_request is None or link_request.used or link_request.expires_at < utcnow():
         raise HTTPException(status.HTTP_404_NOT_FOUND, "this link is no longer valid")
     return link_request
-
-
-@pages_router.get("/confirm/{token}")
-async def confirm_page(token: str, page: PageCtx) -> Response:
-    if page.user is None:
-        return login_redirect(f"/confirm/{token}")
-    return _render_confirm(page, _job_by_confirm_token(page.session, token))
-
-
-def _render_confirm(
-    page: Page, job: Job, error: str | None = None, status_code: int = 200
-) -> Response:
-    context: dict[str, TemplateValue] = {
-        "job": job,
-        "job_type": page.services.catalog.find(job.type),
-        "csrf_token": csrf_token(page.request),
-        "error": error,
-    }
-    return render(page, "confirm.html", context, status_code)
-
-
-@pages_router.post("/confirm/{token}")
-async def confirm_submit(token: str, page: PageCtx) -> Response:
-    if page.user is None:
-        return login_redirect(f"/confirm/{token}")
-    form = await verified_form(page.request)
-    job = _job_by_confirm_token(page.session, token)
-    if form.get("link_account") == "true" and job.identity:
-        _link_identity(page.session, job.identity, page.user)
-    try:
-        enqueue(page.session, job, page.user)
-    except InsufficientCreditsError:
-        page.session.rollback()
-        return _render_confirm(page, job, TOPUP_HINT, status.HTTP_402_PAYMENT_REQUIRED)
-    job.confirm_token_hash = None
-    page.session.commit()
-    announce(page.services.bus, job)
-    return RedirectResponse(f"/jobs/{job.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @pages_router.get("/link/{token}")

@@ -4,7 +4,6 @@ import hmac
 import json
 import logging
 from dataclasses import dataclass
-from typing import Annotated
 
 import httpx
 from pydantic import BaseModel
@@ -25,37 +24,20 @@ from workflows.runs.bus import QUEUE_TOPIC
 from workflows.runs.bus import EventBus
 from workflows.runs.jobs import STATUS_EVENT
 from workflows.runs.jobs import StoredResult
-from workflows.runs.jobs import one_line
 
 logger = logging.getLogger(__name__)
 
 WEBHOOK_TIMEOUT_SECONDS = 10.0
 RETRY_DELAYS_SECONDS = (1.0, 4.0, 16.0)
-NOTIFIED_STATUSES = frozenset(
+SUBSCRIBED_STATUSES = frozenset(
     {
+        JobStatus.QUEUED,
         JobStatus.RUNNING,
         JobStatus.SUCCEEDED,
         JobStatus.FAILED,
         JobStatus.CANCELLED,
     }
 )
-SUBSCRIBED_STATUSES = NOTIFIED_STATUSES | {JobStatus.QUEUED}
-
-ShortStr = Annotated[str, Field(max_length=200)]
-
-
-class Webhook(BaseModel):
-    url: HttpUrl = Field(description="URL that receives a POST on every status change.")
-    token: str = Field(
-        min_length=1,
-        max_length=500,
-        pattern=r"^[\x21-\x7e]+$",
-        description="Printable ASCII token sent back as `Authorization: Bearer <token>`.",
-    )
-    extra_params: dict[ShortStr, ShortStr] = Field(
-        default_factory=dict, max_length=10, description="Fields merged into every payload as-is."
-    )
-    message_prefix: str = Field("", max_length=100, description="Prepended to `message`.")
 
 
 class Subscribe(BaseModel):
@@ -80,13 +62,6 @@ class Delivery:
     headers: dict[str, str]
 
 
-def build_delivery(label: str, hook: Webhook, message: str, details: JsonObject) -> Delivery:
-    text = one_line(hook.message_prefix + message)
-    payload: JsonObject = {**hook.extra_params, "message": text, **details}
-    headers = {"Authorization": f"Bearer {hook.token}"}
-    return Delivery(label, str(hook.url), payload, headers)
-
-
 def sign(signing_key: str, payload: JsonObject) -> str:
     digest = hmac.new(
         signing_key.encode(), json.dumps(payload, sort_keys=True).encode(), hashlib.sha256
@@ -108,7 +83,6 @@ def job_event_payload(
         "run_url": run_url,
         "result_urls": list(urls),
         "error": job.error if status == JobStatus.FAILED else None,
-        "has_webhook": job.webhook is not None,
     }
 
 
@@ -126,18 +100,6 @@ def build_subscription_delivery(
     return Delivery(label, subscription.url, payload, headers)
 
 
-def describe(job: Job, status: JobStatus, run_url: str, result_urls: list[str]) -> str:
-    match status:
-        case JobStatus.RUNNING:
-            return f"started: {run_url}"
-        case JobStatus.SUCCEEDED:
-            return f"is done: {' '.join(result_urls) or run_url}"
-        case JobStatus.FAILED:
-            return f"failed: {job.error} ({run_url})"
-        case _:
-            return "was cancelled"
-
-
 def result_urls(job: Job, status: JobStatus) -> list[str]:
     if status != JobStatus.SUCCEEDED or job.result is None:
         return []
@@ -146,7 +108,7 @@ def result_urls(job: Job, status: JobStatus) -> list[str]:
 
 
 class WebhookNotifier:
-    """Tells a job's webhook and every subscription about each status change, best effort."""
+    """Tells every subscription about each status change of a queued job, best effort."""
 
     def __init__(
         self,
@@ -177,7 +139,7 @@ class WebhookNotifier:
         try:
             deliveries = self._deliveries(job_id, status)
         except SQLAlchemyError:
-            logger.exception("could not read job %s for its webhooks", job_id)
+            logger.exception("could not read job %s for its subscriptions", job_id)
             return
         async with asyncio.TaskGroup() as sends:
             for each in deliveries:
@@ -186,32 +148,16 @@ class WebhookNotifier:
     def _deliveries(self, job_id: int, status: JobStatus) -> list[Delivery]:
         with self._sessions() as session:
             job = session.get_one(Job, job_id)
+            if job.queued_at is None:
+                return []
             job_type = self._catalog.find(job.type)
-            title = job_type.title.lower()
             run_url = f"{self._base_url}/jobs/{job.id}"
-            urls = result_urls(job, status)
-            deliveries: list[Delivery] = []
-            if job.queued_at is not None:
-                payload = job_event_payload(job, job_type, status, run_url, urls)
-                label = f"subscription for job {job.id}"
-                deliveries += [
-                    build_subscription_delivery(label, subscription, payload)
-                    for subscription in session.scalars(select(Subscription))
-                ]
-            if job.webhook is not None and status in NOTIFIED_STATUSES:
-                message = f"your {title} #{job.id} {describe(job, status, run_url, urls)}"
-                webhook = Webhook.model_validate(job.webhook)
-                details: JsonObject = {
-                    "job_id": job.id,
-                    "type": job.type,
-                    "status": status,
-                    "run_url": run_url,
-                    "result_urls": list(urls),
-                }
-                deliveries.append(
-                    build_delivery(f"webhook for job {job.id}", webhook, message, details)
-                )
-            return deliveries
+            payload = job_event_payload(job, job_type, status, run_url, result_urls(job, status))
+            label = f"subscription for job {job.id}"
+            return [
+                build_subscription_delivery(label, subscription, payload)
+                for subscription in session.scalars(select(Subscription))
+            ]
 
     async def _send(self, delivery: Delivery) -> None:
         for retry_delay in (*RETRY_DELAYS_SECONDS, None):

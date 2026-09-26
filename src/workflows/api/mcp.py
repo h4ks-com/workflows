@@ -72,7 +72,7 @@ def build_mcp(services: Services) -> FastMCP:
 
     @mcp.tool
     def how_to_submit() -> list[HowToSubmitEntry]:
-        """Show the web submit URL for each job type. Clients can also submit jobs via the API."""
+        """Show the web submit URL for each job type; jobs are submitted only there, logged in."""
         base_url = services.settings.base_url
         return [
             HowToSubmitEntry(
