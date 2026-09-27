@@ -28,10 +28,11 @@ Every field needs a Field Name, which becomes the param name the executor receiv
 | Dropdown or Radio | buttons, one choice | one of the options |
 | File | link, upload or drag and drop, with its accepted types | an `https` URL; for audio, a private link to the downloaded file |
 | Checkbox with exactly one option | checkbox; the default is checked when it equals the option | boolean |
-| Custom HTML | help text of the field before it; after a dropdown, each `<img src="https://..." alt="option">` becomes the picture on that option | nothing |
+| Checkbox with several options | a grid of options to tick; the default ticks the options it lists, separated by commas | a list of the ticked options, `[]` when none |
+| Custom HTML | help text of the field before it; after a dropdown or a checkbox with several options, each `<img src="https://..." alt="option">` becomes the picture on that option | nothing |
 | Hidden Field | ignored | nothing |
 
-Required fields are required on the site. A default value pre-fills the field; for a dropdown it must match an option. Multiselect dropdowns, checkboxes with several options and password fields are refused.
+Required fields are required on the site; a required checkbox with several options needs at least one ticked. Limit Selection on a checkbox caps the ticks: Exact Number needs exactly that many, and Range needs between its minimum and maximum. A default value pre-fills the field; for a dropdown or checkbox it must match the options. Multiselect dropdowns and password fields are refused.
 
 ## Form pages
 

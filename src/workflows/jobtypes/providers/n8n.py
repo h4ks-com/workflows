@@ -6,6 +6,7 @@ from dataclasses import field
 from dataclasses import replace
 from html import unescape
 from html.parser import HTMLParser
+from typing import Literal
 
 import httpx
 from pydantic import BaseModel
@@ -90,6 +91,10 @@ class FormElement(BaseModel):
     acceptFileTypes: str | None = None
     html: str | None = None
     fieldOptions: FormOptions = Field(default_factory=FormOptions)
+    limitSelection: Literal["unlimited", "exact", "range"] = "unlimited"
+    numberOfSelections: int = 1
+    minSelections: int = 0
+    maxSelections: int = 1
 
 
 class FormFields(BaseModel):
@@ -153,8 +158,9 @@ def _kind_and_type(element: FormElement) -> tuple[FieldKind, ValueType]:
             return "select", "string"
         case "file":
             return "text", "url"
-        case "checkbox" if len(element.fieldOptions.values) == 1:
-            return "checkbox", "boolean"
+        case "checkbox" if element.fieldOptions.values:
+            single = len(element.fieldOptions.values) == 1
+            return ("checkbox", "boolean") if single else ("checklist", "list")
     raise N8nWorkflowError(f"the {element.fieldType} field {element.fieldName} is not supported")
 
 
@@ -162,6 +168,8 @@ def _default(element: FormElement, value_type: ValueType) -> JsonValue:
     raw = element.defaultValue
     if value_type == "boolean":
         return raw == element.fieldOptions.values[0].option
+    if value_type == "list":
+        return _checked(element)
     if raw is None or raw == "":
         return None
     match value_type:
@@ -172,9 +180,35 @@ def _default(element: FormElement, value_type: ValueType) -> JsonValue:
     return raw
 
 
+def _checked(element: FormElement) -> list[JsonValue]:
+    options = [option.option for option in element.fieldOptions.values]
+    checked: list[JsonValue] = [
+        part.strip() for part in (element.defaultValue or "").split(",") if part.strip()
+    ]
+    unknown = [option for option in checked if option not in options]
+    if unknown:
+        raise N8nWorkflowError(
+            f"the field {element.fieldName} checks unknown options {unknown} by default"
+        )
+    return checked
+
+
+def _selections(element: FormElement) -> tuple[int | None, int | None]:
+    at_least_one = 1 if element.requiredField else None
+    match element.limitSelection:
+        case "exact":
+            return element.numberOfSelections, element.numberOfSelections
+        case "range":
+            return max(element.minSelections, at_least_one or 0) or None, element.maxSelections
+    return at_least_one, None
+
+
 def _lengths(
-    kind: FieldKind, value_type: ValueType, required: bool
+    element: FormElement, kind: FieldKind, value_type: ValueType
 ) -> tuple[int | None, int | None]:
+    if kind == "checklist":
+        return _selections(element)
+    required = element.requiredField
     if value_type != "string" or kind == "select":
         return None, None
     return (1 if required else None), (TEXTAREA_LIMIT if kind == "textarea" else TEXT_LIMIT)
@@ -244,7 +278,7 @@ def _field(element: FormElement, override: FieldOverride, html: FieldHtml) -> Fi
         raise N8nWorkflowError(f"the field {element.fieldName} is a multiselect")
     kind, value_type = _kind_and_type(element)
     options = tuple(option.option for option in element.fieldOptions.values)
-    min_length, max_length = _lengths(kind, value_type, element.requiredField)
+    min_length, max_length = _lengths(element, kind, value_type)
     return FieldSpec(
         name=element.fieldName,
         label=element.fieldLabel or element.fieldName,
@@ -252,7 +286,7 @@ def _field(element: FormElement, override: FieldOverride, html: FieldHtml) -> Fi
         kind=kind,
         required=element.requiredField,
         value_type=value_type,
-        enum=options if kind == "select" else None,
+        enum=options if kind in ("select", "checklist") else None,
         minimum=override.minimum,
         maximum=override.maximum,
         min_length=override.min_length if override.min_length is not None else min_length,

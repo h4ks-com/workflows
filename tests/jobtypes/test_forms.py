@@ -1,3 +1,5 @@
+from dataclasses import replace
+
 import pytest
 from pydantic import JsonValue
 from pydantic import ValidationError
@@ -74,6 +76,94 @@ def test_a_shown_field_is_accepted_when_its_condition_holds() -> None:
 
 def test_the_schema_round_trips_through_the_json_schema_driver() -> None:
     assert form_from_schema(FORM.json_schema()).fields == FORM.fields
+
+
+MOVES = FieldSpec(
+    "moves",
+    "Moves",
+    "",
+    "checklist",
+    False,
+    value_type="list",
+    enum=("Idle", "Walk", "Run"),
+    max_length=2,
+    default=[],
+)
+CHECKLIST = Form(
+    "Rig",
+    (
+        FieldSpec("mode", "Mode", "", "select", False, enum=("a", "b"), default="a"),
+        MOVES,
+        FieldSpec(
+            "extras",
+            "Extras",
+            "",
+            "checklist",
+            True,
+            value_type="list",
+            enum=("Dance", "Roll"),
+            min_length=1,
+            default=[],
+            show_when={"mode": "b"},
+        ),
+    ),
+)
+
+
+def test_a_checklist_keeps_its_ticked_options() -> None:
+    assert CHECKLIST.validate({"moves": ["Run", "Idle"]}) == {
+        "mode": "a",
+        "moves": ["Run", "Idle"],
+        "extras": None,
+    }
+    assert CHECKLIST.validate({})["moves"] == []
+
+
+@pytest.mark.parametrize(
+    ("raw", "error"),
+    [
+        ({"moves": ["Fly"]}, "choose only listed options, drop Fly"),
+        ({"moves": ["Idle", "Idle"]}, "choose each option once"),
+        ({"moves": ["Idle", "Walk", "Run"]}, "choose at most 2"),
+        ({"moves": "Idle"}, "list"),
+        ({"mode": "b"}, "fill in extras"),
+        ({"mode": "b", "extras": []}, "fill in extras"),
+        ({"extras": ["Roll"]}, "extras needs mode b"),
+    ],
+)
+def test_a_checklist_validates_its_ticks(raw: dict[str, JsonValue], error: str) -> None:
+    with pytest.raises(ValidationError, match=error):
+        CHECKLIST.validate(raw)
+
+
+def test_a_required_checklist_needs_its_minimum() -> None:
+    required = Form("Rig", (replace(MOVES, required=True, min_length=2),))
+
+    with pytest.raises(ValidationError, match="choose at least 2"):
+        required.validate({"moves": ["Idle"]})
+    with pytest.raises(ValidationError, match="Field required"):
+        required.validate({})
+
+
+def test_a_shown_checklist_accepts_its_ticks() -> None:
+    assert CHECKLIST.validate({"mode": "b", "extras": ["Roll"]})["extras"] == ["Roll"]
+
+
+def test_a_checklist_schema_lists_its_options_and_limit() -> None:
+    moves = CHECKLIST.json_schema()["properties"]
+    assert isinstance(moves, dict)
+    assert moves["moves"] == {
+        "default": [],
+        "description": "",
+        "items": {"type": "string", "enum": ["Idle", "Walk", "Run"]},
+        "maxItems": 2,
+        "title": "Moves",
+        "type": "array",
+        "uniqueItems": True,
+    }
+    _, moves_again, extras_again = form_from_schema(CHECKLIST.json_schema()).fields
+    assert moves_again == MOVES
+    assert (extras_again.kind, extras_again.enum) == ("checklist", ("Dance", "Roll"))
 
 
 @pytest.mark.parametrize(

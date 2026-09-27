@@ -25,6 +25,11 @@
       {% for opt in f.enum %}<button type="button" class="{{ 'on' if opt == f.default else '' }}" data-value="{{ opt }}">{% if f.previews and opt in f.previews %}<img src="{{ f.previews[opt] }}" alt="" loading="lazy">{% endif %}{{ opt }}</button>{% endfor %}
     </div>
     <input type="hidden" name="{{ f.name }}" value="{{ f.default or f.enum[0] }}">
+    {% elif f.kind == "checklist" %}
+    {% set checked = f.default if f.default is iterable and f.default is not string else [] %}
+    <div class="checklist{{ ' previews' if f.previews }}" role="group" aria-label="{{ f.label }}">
+      {% for opt in f.enum %}<label><input type="checkbox" name="{{ f.name }}" value="{{ opt }}"{{ " checked" if opt in checked }}>{% if f.previews and opt in f.previews %}<img src="{{ f.previews[opt] }}" alt="" loading="lazy">{% endif %}<span>{{ opt }}</span></label>{% endfor %}
+    </div>
     {% elif f.kind == "checkbox" %}
     <label class="row" style="font:13px var(--mono);color:var(--mid)"><input type="checkbox" name="{{ f.name }}" style="width:auto" {% if f.default %}checked{% endif %}> {{ f.description }}</label>
     {% elif f.kind == "number" %}

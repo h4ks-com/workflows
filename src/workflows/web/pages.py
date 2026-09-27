@@ -90,6 +90,12 @@ def params_from_form(form: FormData, job_type: JobType) -> JsonObject:
         raw = form.get(spec.name)
         if spec.kind == "checkbox":
             params[spec.name] = spec.name in form
+        elif spec.kind == "checklist":
+            checked: list[JsonValue] = [
+                value for value in form.getlist(spec.name) if isinstance(value, str)
+            ]
+            if checked:
+                params[spec.name] = checked
         elif isinstance(raw, str) and raw != "":
             params[spec.name] = raw
     return params

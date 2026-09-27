@@ -125,6 +125,7 @@
   function fieldValue(form, name) {
     const input = form.elements[name];
     if (!input || input.disabled) return null;
+    if (input instanceof RadioNodeList) return [...input].filter((box) => box.checked && !box.disabled).map((box) => box.value);
     if (input.type === "checkbox") return input.checked;
     return input.value;
   }
@@ -134,7 +135,7 @@
     if ("not" in condition) return String(value) !== String(condition.not);
     if ("one_of" in condition) return condition.one_of.map(String).includes(String(value));
     if ("not_one_of" in condition) return !condition.not_one_of.map(String).includes(String(value));
-    return (value === null || value === "") === Boolean(condition.empty);
+    return (value === null || value === "" || (Array.isArray(value) && !value.length)) === Boolean(condition.empty);
   }
 
   function applyShowWhen() {

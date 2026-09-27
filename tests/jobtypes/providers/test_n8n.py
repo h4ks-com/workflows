@@ -174,6 +174,78 @@ async def test_bad_option_pictures_skip_the_workflow(html: str, error: str) -> N
     assert error in n8n.errors[str(IMAGE_WORKFLOW["name"])]
 
 
+def moves_field(**change: JsonValue) -> JsonValue:
+    options: list[JsonValue] = [{"option": name} for name in ("Idle", "Walk", "Run", "Jump")]
+    field: JsonObject = {
+        "fieldType": "checkbox",
+        "fieldName": "animations",
+        "fieldLabel": "Basic moves",
+        "fieldOptions": {"values": options},
+    }
+    return field | change
+
+
+@respx.mock
+async def test_a_checkbox_with_several_options_is_a_checklist() -> None:
+    walk = "https://media.example/walk.webp"
+    html = f'<p>Tick the moves to add.</p><img src="{walk}" alt="Walk">'
+    fields: list[JsonValue] = [
+        moves_field(defaultValue="Idle, Run"),
+        {"fieldType": "html", "html": html},
+    ]
+    respx.get(LIST_URL).respond(json={"data": [with_form_fields(fields)], "nextCursor": None})
+
+    [echo] = await provider().discover()
+
+    [moves] = echo.form.fields
+    assert (moves.kind, moves.value_type) == ("checklist", "list")
+    assert moves.enum == ("Idle", "Walk", "Run", "Jump")
+    assert moves.default == ["Idle", "Run"]
+    assert moves.description == "Tick the moves to add."
+    assert moves.previews == {"Walk": walk}
+    assert (moves.min_length, moves.max_length) == (None, None)
+    assert echo.validate({"animations": ["Jump"]}) == {"animations": ["Jump"]}
+
+
+@respx.mock
+@pytest.mark.parametrize(
+    ("change", "limits"),
+    [
+        ({"requiredField": True}, (1, None)),
+        ({"limitSelection": "exact", "numberOfSelections": 2}, (2, 2)),
+        ({"limitSelection": "range", "minSelections": 0, "maxSelections": 3}, (None, 3)),
+        (
+            {
+                "limitSelection": "range",
+                "minSelections": 0,
+                "maxSelections": 3,
+                "requiredField": True,
+            },
+            (1, 3),
+        ),
+    ],
+)
+async def test_a_checklist_takes_the_selection_limits(
+    change: dict[str, JsonValue], limits: tuple[int | None, int | None]
+) -> None:
+    fields = [moves_field(**change)]
+    respx.get(LIST_URL).respond(json={"data": [with_form_fields(fields)], "nextCursor": None})
+
+    [echo] = await provider().discover()
+
+    assert (echo.form.fields[0].min_length, echo.form.fields[0].max_length) == limits
+
+
+@respx.mock
+async def test_a_checklist_default_must_name_its_options() -> None:
+    fields = [moves_field(defaultValue="Idle, Fly")]
+    respx.get(LIST_URL).respond(json={"data": [with_form_fields(fields)], "nextCursor": None})
+    n8n = provider()
+
+    assert await n8n.discover() == []
+    assert "checks unknown options ['Fly']" in n8n.errors[str(IMAGE_WORKFLOW["name"])]
+
+
 @respx.mock
 async def test_a_constant_price_reads_as_credits() -> None:
     minimal = with_manifest({"price": "40"}, replace=True)

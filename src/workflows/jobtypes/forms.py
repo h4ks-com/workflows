@@ -23,8 +23,8 @@ UPLOAD = "x-upload"
 SHOW_WHEN = "x-show-when"
 PREVIEWS = "x-previews"
 
-type FieldKind = Literal["select", "checkbox", "number", "textarea", "text"]
-type ValueType = Literal["string", "integer", "number", "boolean", "url"]
+type FieldKind = Literal["select", "checklist", "checkbox", "number", "textarea", "text"]
+type ValueType = Literal["string", "integer", "number", "boolean", "url", "list"]
 
 VALUE_TYPES: dict[ValueType, type] = {
     "string": str,
@@ -32,6 +32,7 @@ VALUE_TYPES: dict[ValueType, type] = {
     "number": float,
     "boolean": bool,
     "url": HttpUrl,
+    "list": list[str],
 }
 
 
@@ -57,7 +58,7 @@ class FieldSpec:
 
 
 def _is_empty(value: JsonValue) -> bool:
-    return value is None or value == ""
+    return value is None or value in ("", [])
 
 
 def condition_holds(condition: JsonValue, value: JsonValue) -> bool:
@@ -134,6 +135,26 @@ def _one_of(values: tuple[str, ...]) -> Callable[[str | None], str | None]:
     return check
 
 
+def _some_of(spec: FieldSpec) -> Callable[[list[str] | None], list[str] | None]:
+    options = spec.enum or ()
+
+    def check(value: list[str] | None) -> list[str] | None:
+        if value is None or (not value and spec.show_when):
+            return value
+        unknown = [option for option in value if option not in options]
+        if unknown:
+            raise ValueError(f"choose only listed options, drop {', '.join(unknown)}")
+        if len(set(value)) != len(value):
+            raise ValueError("choose each option once")
+        if spec.min_length is not None and len(value) < spec.min_length:
+            raise ValueError(f"choose at least {spec.min_length}")
+        if spec.max_length is not None and len(value) > spec.max_length:
+            raise ValueError(f"choose at most {spec.max_length}")
+        return value
+
+    return check
+
+
 def _always_required(spec: FieldSpec) -> bool:
     return spec.required and not spec.show_when
 
@@ -142,14 +163,26 @@ def _annotation(spec: FieldSpec) -> object:
     value_type = VALUE_TYPES[spec.value_type]
     nullable = spec.show_when is not None or (not spec.required and spec.default is None)
     annotation = value_type | None if nullable else value_type
+    if spec.kind == "checklist":
+        return Annotated[annotation, AfterValidator(_some_of(spec))]
     if spec.enum is not None:
         return Annotated[annotation, AfterValidator(_one_of(spec.enum))]
     return annotation
 
 
+def _checklist_extra(spec: FieldSpec) -> JsonDict:
+    extra: JsonDict = {"items": {"type": "string", "enum": list(spec.enum or ())}}
+    extra["uniqueItems"] = True
+    if spec.min_length is not None:
+        extra["minItems"] = spec.min_length
+    if spec.max_length is not None:
+        extra["maxItems"] = spec.max_length
+    return extra
+
+
 def _schema_extra(spec: FieldSpec) -> JsonDict:
-    extra: JsonDict = {}
-    if spec.enum is not None:
+    extra: JsonDict = _checklist_extra(spec) if spec.kind == "checklist" else {}
+    if spec.enum is not None and spec.kind == "select":
         extra["enum"] = list(spec.enum)
     if spec.kind == "textarea":
         extra["format"] = TEXTAREA
@@ -163,7 +196,7 @@ def _schema_extra(spec: FieldSpec) -> JsonDict:
 
 
 def _field_info(spec: FieldSpec) -> object:
-    lengths = spec.value_type != "url"
+    lengths = spec.value_type not in ("url", "list")
     return Field(
         ... if _always_required(spec) else spec.default,
         title=spec.label,
@@ -224,8 +257,9 @@ def _first(prop: JsonObject, key: str) -> JsonValue:
     return None
 
 
-def _enum(prop: JsonObject) -> tuple[str, ...] | None:
-    values = _first(prop, "enum")
+def _enum(prop: JsonObject, value_type: ValueType) -> tuple[str, ...] | None:
+    source = _as_object(_first(prop, "items")) if value_type == "list" else prop
+    values = _first(source, "enum")
     return tuple(str(value) for value in values) if isinstance(values, list) else None
 
 
@@ -249,10 +283,14 @@ def _value_type(prop: JsonObject) -> ValueType:
             return "number"
         case "boolean":
             return "boolean"
+        case "array":
+            return "list"
     return "string"
 
 
 def _kind(prop: JsonObject, value_type: ValueType, enum: tuple[str, ...] | None) -> FieldKind:
+    if value_type == "list":
+        return "checklist"
     if enum is not None:
         return "select"
     if value_type == "boolean":
@@ -270,10 +308,19 @@ def _previews(value: JsonValue) -> dict[str, str] | None:
     return {str(option): str(url) for option, url in value.items()}
 
 
+def _lengths(prop: JsonObject, value_type: ValueType) -> tuple[int | None, int | None]:
+    match value_type:
+        case "url":
+            return None, None
+        case "list":
+            return _length(prop, "minItems"), _length(prop, "maxItems")
+    return _length(prop, "minLength"), _length(prop, "maxLength")
+
+
 def _field_from_schema(name: str, prop: JsonObject, required: bool) -> FieldSpec:
     value_type = _value_type(prop)
-    enum = _enum(prop)
-    lengths = value_type != "url"
+    enum = _enum(prop, value_type)
+    min_length, max_length = _lengths(prop, value_type)
     return FieldSpec(
         name=name,
         label=str(prop.get("title", name)),
@@ -284,8 +331,8 @@ def _field_from_schema(name: str, prop: JsonObject, required: bool) -> FieldSpec
         enum=enum,
         minimum=_number(prop, "minimum"),
         maximum=_number(prop, "maximum"),
-        min_length=_length(prop, "minLength") if lengths else None,
-        max_length=_length(prop, "maxLength") if lengths else None,
+        min_length=min_length,
+        max_length=max_length,
         default=prop.get("default"),
         accept=str(prop[UPLOAD]) if UPLOAD in prop else None,
         show_when=_as_object(prop[SHOW_WHEN]) if SHOW_WHEN in prop else None,

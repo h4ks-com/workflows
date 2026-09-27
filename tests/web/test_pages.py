@@ -1,5 +1,6 @@
 import asyncio
 import json
+from collections.abc import Iterator
 from dataclasses import replace
 
 import httpx
@@ -10,10 +11,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from conftest import BASE_URL
 from conftest import BEANS_URL
 from conftest import EXECUTOR_TOKEN
+from conftest import FETCH_HEADERS
 from conftest import MINIO_ENDPOINT
 from conftest import N8N_URL
+from conftest import SERVICE_TOKEN
 from conftest import FakeProber
 from conftest import FakeStorage
 from conftest import csrf_from
@@ -25,10 +29,12 @@ from conftest import with_storage
 from workflows.accounts.beans import BeansPayout
 from workflows.app import create_app
 from workflows.db import ExternalIdentity
+from workflows.db import Job
 from workflows.db import JsonObject
 from workflows.jobtypes.catalog import StaticProvider
 from workflows.jobtypes.forms import FieldSpec
 from workflows.jobtypes.forms import Form
+from workflows.jobtypes.pricing import PriceRule
 from workflows.jobtypes.providers.builtin import builtin_job_types
 from workflows.runs.jobs import LogEvent
 from workflows.runs.jobs import StepEvent
@@ -825,3 +831,90 @@ def test_home_leaves_out_runs_of_types_no_longer_offered(
 
     assert "old echo run" not in client.get("/").text
     assert "old echo run" in client.get("/runs").text
+
+
+SERVICE_HEADERS = {"Authorization": f"Bearer {SERVICE_TOKEN}"}
+MOVES = FieldSpec(
+    name="moves",
+    label="Basic moves",
+    description="Tick the moves to add.",
+    kind="checklist",
+    required=False,
+    value_type="list",
+    enum=("Idle", "Walk", "Run"),
+    max_length=2,
+    default=[],
+    previews={"Walk": "https://s3.example/walk.webp"},
+)
+
+
+@pytest.fixture
+def rig(settings: Settings, prober: FakeProber) -> Iterator[FastAPI]:
+    song = next(
+        t
+        for t in builtin_job_types(httpx.AsyncClient(), N8N_URL, EXECUTOR_TOKEN)
+        if t.name == "song"
+    )
+    rigged = replace(song, form=Form("Rig", (MOVES,)), price=PriceRule("40"))
+    app = create_app(settings, prober, [StaticProvider([rigged])])
+    asyncio.run(app.state.services.catalog.refresh())
+    yield app
+    app.state.services.sessions.kw["bind"].dispose()
+
+
+def test_a_checklist_renders_toggle_chips_with_previews(rig: FastAPI) -> None:
+    page = TestClient(rig, base_url="https://testserver").get("/submit/song").text
+
+    assert '<div class="checklist previews" role="group" aria-label="Basic moves">' in page
+    assert '<input type="checkbox" name="moves" value="Idle"><span>Idle</span>' in page
+    assert 'value="Walk"><img src="https://s3.example/walk.webp" alt="" loading="lazy">' in page
+    assert "Tick the moves to add." in page
+
+
+def test_a_shared_checklist_draft_opens_ticked(rig: FastAPI) -> None:
+    client = TestClient(rig, base_url="https://testserver", headers=FETCH_HEADERS)
+    draft = {"type": "song", "params": {"moves": ["Run", "Idle"]}}
+
+    shared = client.post("/api/clients/drafts", json=draft, headers=SERVICE_HEADERS)
+    page = client.get(shared.json()["url"].removeprefix(BASE_URL)).text
+
+    assert shared.json()["quote"]["credits"] == 40
+    assert 'value="Idle" checked>' in page
+    assert 'value="Run" checked>' in page
+    assert 'value="Walk">' in page
+
+
+def submit_moves(rig: FastAPI, moves: list[str]) -> tuple[int, str]:
+    client = TestClient(rig, base_url="https://testserver", headers=FETCH_HEADERS)
+    with rig.state.services.sessions() as session:
+        log_in(client, make_user(session, "alice", paid_credits=1000))
+    csrf = csrf_from(client.get("/submit/song").text)
+    response = client.post(
+        "/submit/song", data={"csrf_token": csrf, "moves": moves}, follow_redirects=False
+    )
+    return response.status_code, response.text
+
+
+def test_a_checklist_submits_its_ticked_options(rig: FastAPI) -> None:
+    status_code, _ = submit_moves(rig, ["Walk", "Idle"])
+
+    assert status_code == 303
+    with rig.state.services.sessions() as session:
+        [job] = session.scalars(select(Job)).all()
+        assert job.params == {"moves": ["Walk", "Idle"]}
+
+
+def test_a_checklist_left_empty_submits_no_moves(rig: FastAPI) -> None:
+    status_code, _ = submit_moves(rig, [])
+
+    assert status_code == 303
+    with rig.state.services.sessions() as session:
+        assert session.scalars(select(Job)).one().params == {"moves": []}
+
+
+def test_too_many_ticks_rerender_the_form_still_ticked(rig: FastAPI) -> None:
+    status_code, page = submit_moves(rig, ["Idle", "Walk", "Run"])
+
+    assert status_code == 422
+    assert "check basic moves: choose at most 2" in page
+    assert 'value="Run" checked>' in page
