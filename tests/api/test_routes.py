@@ -213,7 +213,8 @@ def test_executor_events_drive_the_job(
     job = queue_job(session, services, user)
     headers = {"Authorization": f"Bearer {start_job(session, job)}"}
     url = f"/api/jobs/{job.id}/events"
-    result = {"kind": "result", "files": [{"url": "https://s3/x.wav", "name": "x", "mime": "a/w"}]}
+    wav = {"url": "https://s3/x.wav", "name": "x", "mime": "a/w", "details": "A 3 second loop."}
+    result = {"kind": "result", "files": [wav]}
 
     assert client.post(url, json={"kind": "log", "message": "hi"}).status_code == 401
     assert (
@@ -230,7 +231,7 @@ def test_executor_events_drive_the_job(
     view = client.get(url.removesuffix("/events")).json()
     assert view["status"] == "succeeded"
     assert view["progress"]["fraction"] == 1.0
-    assert view["result"]["files"][0]["url"] == "https://s3/x.wav"
+    assert view["result"]["files"][0] == wav
 
 
 def test_executor_error_fails_and_refunds(

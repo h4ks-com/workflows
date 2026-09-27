@@ -82,7 +82,7 @@ The workflow then posts events to `callback_url` with `Authorization: Bearer <ca
 
 - `{"kind": "step", "step": "generate"}` when a step starts, and optionally `done` and `total` for progress within it. Send the first step right away: a job with no event within 120 seconds fails.
 - `{"kind": "log", "message": "..."}` for the activity log.
-- `{"kind": "result", "title": "...", "files": [{"url": "https://...", "name": "image.png", "mime": "image/png"}], "metadata_url": "https://..."}` to finish. Store files in a public bucket. The job page shows images, plays audio and video, and opens `model/gltf-binary` files in a 3D viewer; every file is also a download. An optional `links` list of `{"label": "...", "url": "https://..."}` adds pages that open the result, such as a player.
+- `{"kind": "result", "title": "...", "files": [{"url": "https://...", "name": "image.png", "mime": "image/png"}], "metadata_url": "https://..."}` to finish. Store files in a public bucket. The job page shows images, plays audio and video, and opens `model/gltf-binary` files in a 3D viewer; every file is also a download. An optional `links` list of `{"label": "...", "url": "https://..."}` adds pages that open the result, such as a player. A file's optional `details` (up to 2000 characters) says what it holds and how to use it, like a model's clip names; agents read it through the API and MCP to build on the result.
 - `{"kind": "error", "message": "..."}` to fail the job and refund the user.
 
 Give the result and error calls "retry on fail" (5 tries, 5 seconds apart) so a service restart does not lose a finished job. Text is trimmed to one line; titles and names hold 200 characters and messages 500.

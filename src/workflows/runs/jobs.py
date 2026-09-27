@@ -77,6 +77,11 @@ class ResultFile(BaseModel):
     url: HttpLink = Field(description="Permanent bucket URL of the file.")
     name: OneLine = Field(max_length=200, description="File name.")
     mime: OneLine = Field(max_length=100, description="MIME type of the file.")
+    details: str | None = Field(
+        None,
+        max_length=2000,
+        description="What the file holds and how to use it, like a model's clip names.",
+    )
 
 
 class ResultLink(BaseModel):
