@@ -19,6 +19,7 @@ from workflows.accounts.auth import require_service
 from workflows.accounts.ledger import InsufficientCreditsError
 from workflows.accounts.ledger import grant_daily
 from workflows.api.drafts import DraftView
+from workflows.api.drafts import lines_as_text
 from workflows.api.drafts import share_form
 from workflows.api.routes import QuoteRequest
 from workflows.api.routes import get_job_type
@@ -110,7 +111,7 @@ async def submit_for_identity(
     job_type = get_job_type(services, body.type)
     try:
         _, params, priced = await price_request(
-            services, QuoteRequest(type=body.type, params=body.params)
+            services, QuoteRequest(type=body.type, params=lines_as_text(job_type, body.params))
         )
     except ProbeError as error:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(error)) from error

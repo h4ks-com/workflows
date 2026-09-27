@@ -40,7 +40,7 @@ async def _quote_if_complete(services: Services, request: QuoteRequest) -> Quote
     return quote_view(priced)
 
 
-def _lines_as_text(job_type: JobType, params: JsonObject) -> JsonObject:
+def lines_as_text(job_type: JobType, params: JsonObject) -> JsonObject:
     # Agents often send a list for a one-per-line text field, so we join it into lines.
     text_fields = {spec.name for spec in job_type.form.fields if spec.kind in ("text", "textarea")}
     return {
@@ -63,7 +63,7 @@ async def share_form(services: Services, request: QuoteRequest) -> DraftView:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, f"{job_type.name} has no {', '.join(unknown)}"
         )
-    params = _lines_as_text(job_type, request.params)
+    params = lines_as_text(job_type, request.params)
     quote = await _quote_if_complete(services, QuoteRequest(type=request.type, params=params))
     with services.sessions.begin() as session:
         if live_draft_count(session) >= MAX_LIVE_DRAFTS:
