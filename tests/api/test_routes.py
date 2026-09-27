@@ -104,13 +104,12 @@ def test_quote_rejects_bad_requests(
         assert response.json()["detail"] == detail
 
 
-def test_the_web_form_is_the_only_way_to_submit(client: TestClient, session: Session) -> None:
+def test_a_logged_in_user_submits_only_through_the_web_form(
+    client: TestClient, session: Session
+) -> None:
     log_in(client, make_user(session, "alice"))
 
-    as_user = client.post("/api/jobs", json=SONG)
-    as_service = client.post("/api/clients/jobs", json=SONG, headers=SERVICE_HEADERS)
-
-    assert (as_user.status_code, as_service.status_code) == (405, 404)
+    assert client.post("/api/jobs", json=SONG).status_code == 405
 
 
 def test_session_posts_need_the_fetch_header(

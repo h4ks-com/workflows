@@ -16,15 +16,24 @@ from starlette.responses import Response
 
 from workflows.accounts.auth import csrf_token
 from workflows.accounts.auth import require_service
+from workflows.accounts.ledger import InsufficientCreditsError
 from workflows.accounts.ledger import grant_daily
 from workflows.api.drafts import DraftView
 from workflows.api.drafts import share_form
 from workflows.api.routes import QuoteRequest
+from workflows.api.routes import get_job_type
+from workflows.api.routes import price_request
+from workflows.api.views import JobView
+from workflows.api.views import job_view
 from workflows.db import ExternalIdentity
 from workflows.db import LinkRequest
 from workflows.db import Subscription
 from workflows.db import User
 from workflows.db import utcnow
+from workflows.jobtypes.probe import ProbeError
+from workflows.runs.jobs import announce
+from workflows.runs.jobs import create_job
+from workflows.runs.jobs import enqueue
 from workflows.runs.jobs import hash_token
 from workflows.runs.webhooks import Subscribe
 from workflows.state import AppServices
@@ -51,6 +60,10 @@ IdentityStr = Annotated[
 
 class ClientLinkRequest(BaseModel):
     identity: IdentityStr = Field(description="Identity to link.")
+
+
+class ClientJobRequest(QuoteRequest):
+    identity: IdentityStr = Field(description="Linked identity whose user submits and pays.")
 
 
 class ClientLinkView(BaseModel):
@@ -83,6 +96,36 @@ def _link_identity(session: Session, identity: str, user: User) -> None:
 @router.post("/drafts", status_code=status.HTTP_201_CREATED)
 async def create_draft_link(body: QuoteRequest, services: AppServices) -> DraftView:
     return await share_form(services, body)
+
+
+@router.post("/jobs", status_code=status.HTTP_201_CREATED)
+async def submit_for_identity(
+    body: ClientJobRequest, session: Db, services: AppServices
+) -> JobView:
+    """Submit a job for the user linked to an identity, paid from their credits.
+
+    :raises HTTPException: 404 when no user is linked, 402 when they cannot pay, 422 for an
+        invalid form, 502 when a media field cannot be probed.
+    """
+    job_type = get_job_type(services, body.type)
+    try:
+        _, params, priced = await price_request(
+            services, QuoteRequest(type=body.type, params=body.params)
+        )
+    except ProbeError as error:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(error)) from error
+    user = _linked_user(session, body.identity)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"no user linked to {body.identity}")
+    job = create_job(session, job_type, params, priced, user)
+    try:
+        enqueue(session, job, user)
+    except InsufficientCreditsError as error:
+        session.rollback()
+        raise HTTPException(status.HTTP_402_PAYMENT_REQUIRED, str(error)) from error
+    session.commit()
+    announce(services.bus, job)
+    return job_view(job, job_type)
 
 
 @router.post("/links")

@@ -56,6 +56,49 @@ def test_get_identity(client: TestClient, session: Session) -> None:
     assert response.json() == {"username": "alice", "free_credits": 500, "paid_credits": 20}
 
 
+def link(session: Session, username: str, paid_credits: int = 0) -> None:
+    user = make_user(session, username, paid_credits=paid_credits)
+    session.add(ExternalIdentity(identity=f"irc:{username}", user_id=user.id))
+    session.commit()
+
+
+def test_a_linked_identity_submits_and_pays(client: TestClient, session: Session) -> None:
+    link(session, "alice")
+
+    response = client.post(
+        "/api/clients/jobs", json={**SUBMIT, "identity": "irc:alice"}, headers=SERVICE_HEADERS
+    )
+
+    assert response.status_code == 201
+    job = session.get(Job, response.json()["id"])
+    assert job is not None
+    assert job.status == JobStatus.QUEUED
+    assert job.owner is not None
+    assert job.owner.username == "alice"
+
+
+def test_an_unlinked_identity_cannot_submit(client: TestClient) -> None:
+    response = client.post(
+        "/api/clients/jobs", json={**SUBMIT, "identity": "irc:nobody"}, headers=SERVICE_HEADERS
+    )
+
+    assert response.status_code == 404
+
+
+def test_a_linked_identity_without_credits_is_refused(client: TestClient, session: Session) -> None:
+    link(session, "bob")
+    expensive = {"type": "song", "params": {"prompt": "cats", "seconds": 240, "model": "minimax"}}
+    client.post(
+        "/api/clients/jobs", json={**expensive, "identity": "irc:bob"}, headers=SERVICE_HEADERS
+    )
+
+    response = client.post(
+        "/api/clients/jobs", json={**expensive, "identity": "irc:bob"}, headers=SERVICE_HEADERS
+    )
+
+    assert response.status_code == 402
+
+
 def test_link_page_redirects_anonymous_users(client: TestClient) -> None:
     response = client.get("/link/whatever", follow_redirects=False)
 
