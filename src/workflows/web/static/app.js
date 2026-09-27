@@ -179,12 +179,37 @@
     if (file) uploadFile(zone.querySelector("input[data-upload-for]"), file);
   });
 
+  // The browser gives up on a stream for good when the server answers with an error (a restart
+  // during a deploy does that), so we reopen it ourselves; every stream starts with a snapshot.
+  function liveStream(url, listen) {
+    let source;
+    let finished = false;
+    let delay = 1000;
+    const open = () => {
+      source = new EventSource(url);
+      source.addEventListener("open", () => { delay = 1000; });
+      source.addEventListener("error", () => {
+        if (finished || source.readyState !== EventSource.CLOSED) return;
+        setTimeout(open, delay);
+        delay = Math.min(delay * 2, 30000);
+      });
+      listen(source, () => { finished = true; source.close(); });
+    };
+    open();
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible" || finished) return;
+      source.close();
+      open();
+    });
+  }
+
   function connectQueueStream() {
     const root = document.getElementById("queue-live");
     if (!root || typeof EventSource === "undefined") return;
-    const source = new EventSource("/api/queue/stream");
-    source.addEventListener("queue", () => {
-      htmx.ajax("GET", "/partials/queue", { target: "#queue-live", swap: "innerHTML" });
+    liveStream("/api/queue/stream", (source) => {
+      source.addEventListener("queue", () => {
+        htmx.ajax("GET", "/partials/queue", { target: "#queue-live", swap: "innerHTML" });
+      });
     });
   }
 
@@ -192,14 +217,15 @@
     const root = document.getElementById("job-live");
     if (!root || typeof EventSource === "undefined") return;
     const jobId = root.dataset.jobId;
-    const source = new EventSource(`/api/jobs/${jobId}/stream`);
     const refresh = () => htmx.ajax("GET", `/partials/jobs/${jobId}`, { target: "#job-live", swap: "innerHTML" });
-    const refreshAndCloseWhenDone = (event) => {
-      refresh();
-      if (TERMINAL.includes(JSON.parse(event.data).status)) source.close();
-    };
-    ["step", "log", "result", "error"].forEach((kind) => source.addEventListener(kind, refresh));
-    ["snapshot", "status"].forEach((kind) => source.addEventListener(kind, refreshAndCloseWhenDone));
+    liveStream(`/api/jobs/${jobId}/stream`, (source, finish) => {
+      const refreshAndFinishWhenDone = (event) => {
+        refresh();
+        if (TERMINAL.includes(JSON.parse(event.data).status)) finish();
+      };
+      ["step", "log", "result", "error"].forEach((kind) => source.addEventListener(kind, refresh));
+      ["snapshot", "status"].forEach((kind) => source.addEventListener(kind, refreshAndFinishWhenDone));
+    });
   }
 
   // The 3D viewer is a megabyte, so we load it only once a model shows up, including one a live update swaps in.
