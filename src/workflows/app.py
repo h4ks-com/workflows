@@ -97,8 +97,8 @@ def security_headers(settings: Settings) -> dict[str, str]:
         "font-src https://fonts.gstatic.com",
         # The 3D viewer decodes meshes with WebAssembly and fetches them from the media host.
         "script-src 'self' 'wasm-unsafe-eval'",
-        f"connect-src 'self' {_origin(settings.upload_url)} {media}",
-        # The 3D viewer loads textures packed inside a model through blob: URLs.
+        # The 3D viewer fetches textures packed inside a model through blob: URLs.
+        f"connect-src 'self' blob: {_origin(settings.upload_url)} {media}",
         f"img-src 'self' data: blob: {media}",
         f"media-src 'self' {media}",
         "frame-ancestors 'none'",
