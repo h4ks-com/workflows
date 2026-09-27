@@ -43,6 +43,16 @@ def test_a_form_missing_fields_has_no_quote(client: TestClient) -> None:
     assert response.json()["quote"] is None
 
 
+def test_a_list_in_a_text_field_becomes_lines(client: TestClient, session: Session) -> None:
+    lines = {"type": "song", "params": {"prompt": ["dragons", "castles"]}}
+
+    url = client.post("/api/clients/drafts", json=lines, headers=SERVICE_HEADERS).json()["url"]
+
+    draft = session.scalar(select(Draft).where(Draft.token == token_of(url)))
+    assert draft is not None
+    assert draft.params["prompt"] == "dragons\ncastles"
+
+
 def test_sharing_rejects_unknown_fields_and_types(client: TestClient) -> None:
     unknown_field = {"type": "song", "params": {"colour": "red"}}
     unknown_type = {"type": "nope", "params": {}}
