@@ -15,7 +15,7 @@ dependencies = [
     "authlib==1.8.0",
     "itsdangerous==2.2.0",
     "sse-starlette==3.4.11",
-    "fastmcp==4.0.5",
+    "fastmcp==4.0.10",
     "python-multipart==0.0.32",
     "minio>=7.2.20",
 ]
