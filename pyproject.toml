@@ -14,7 +14,7 @@ dependencies = [
     "jinja2==3.1.6",
     "authlib==1.8.0",
     "itsdangerous==2.2.0",
-    "sse-starlette==3.4.11",
+    "sse-starlette==3.5.0",
     "fastmcp==4.0.5",
     "python-multipart==0.0.32",
     "minio>=7.2.20",
