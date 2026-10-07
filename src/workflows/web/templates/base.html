@@ -31,10 +31,10 @@
   </header>
   {% block content %}{% endblock %}
   <footer class="foot">
-    <a href="https://h4ks.com">h4ks</a>
-    <a href="https://chat.h4ks.com">chat</a>
-    {% if beans_url %}<a href="{{ beans_url }}">beans</a>{% endif %}
-    <a href="https://github.com/h4ks-com/workflows">source</a>
+    <a href="https://h4ks.com"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-7 9 7v9h-6v-6H9v6H3z"/></svg>h4ks</a>
+    <a href="https://chat.h4ks.com"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>chat</a>
+    {% if beans_url %}<a href="{{ beans_url }}"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="12" rx="6.5" ry="9" transform="rotate(35 12 12)"/><path d="M9 6c3 3 3 9 6 12"/></svg>beans</a>{% endif %}
+    <a href="https://github.com/h4ks-com/workflows"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg>source</a>
   </footer>
 </div>
 <script src="{{ url_for('static', path='htmx-2.0.4.min.js') }}"></script>
