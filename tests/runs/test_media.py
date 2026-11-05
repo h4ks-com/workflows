@@ -15,11 +15,13 @@ from workflows.db import Job
 from workflows.db import JobEvent
 from workflows.db import JobStatus
 from workflows.jobtypes.catalog import Quote
+from workflows.jobtypes.forms import FieldSpec
+from workflows.jobtypes.forms import Form
 from workflows.runs.jobs import create_job
 from workflows.runs.jobs import enqueue
 from workflows.runs.media import MediaStager
 from workflows.runs.media import StagingError
-from workflows.runs.media import media_fields
+from workflows.runs.media import staged_fields
 from workflows.runs.worker import QueueWorker
 from workflows.state import Services
 
@@ -52,7 +54,7 @@ async def test_stage_keeps_the_downloaded_file_private() -> None:
     )
     store = KeptFiles()
 
-    staged = await stager(store).stage("7/url", SONG_URL)
+    staged = await stager(store).stage("7/url", SONG_URL, "audio")
 
     assert staged.url == "https://private.test/7/url.mp3?signature=x"
     assert (staged.title, staged.duration_seconds) == ("Café Song", 213.5)
@@ -67,12 +69,44 @@ async def test_stage_reports_why_the_downloader_refused() -> None:
     respx.post(f"{YTDL}/v1/file").respond(422, json={"detail": "live streams have no end"})
 
     with pytest.raises(StagingError, match="live streams have no end"):
-        await stager(KeptFiles()).stage("7/url", SONG_URL)
+        await stager(KeptFiles()).stage("7/url", SONG_URL, "audio")
 
 
-def test_only_audio_link_fields_are_downloaded(services: Services) -> None:
-    assert media_fields(services.catalog.find("parody").form) == ["url"]
-    assert media_fields(services.catalog.find("song").form) == []
+def test_only_upload_fields_are_downloaded(services: Services) -> None:
+    assert staged_fields(services.catalog.find("parody").form) == {"url": "audio"}
+    assert staged_fields(services.catalog.find("song").form) == {}
+
+
+def upload(name: str, accept: str) -> FieldSpec:
+    return FieldSpec(name, name, "", "text", required=False, value_type="url", accept=accept)
+
+
+def test_midi_is_a_file_even_when_its_type_says_audio() -> None:
+    form = Form("Params", (upload("voice", "audio/*"), upload("midi", ".mid,.midi,audio/midi")))
+
+    assert staged_fields(form) == {"voice": "audio", "midi": "file"}
+
+
+@respx.mock
+async def test_a_file_is_fetched_as_it_is_and_kept_with_its_extension() -> None:
+    midi_url = "https://files.example/K6e.mid"
+    respx.get(midi_url).respond(
+        200, content=b"MThd", headers={"content-type": "application/octet-stream"}
+    )
+    store = KeptFiles()
+
+    staged = await stager(store).stage("7/midi", midi_url, "file")
+
+    assert staged.url == "https://private.test/7/midi.mid?signature=x"
+    assert store.kept == {"7/midi.mid": b"MThd"}
+
+
+@respx.mock
+async def test_a_file_that_cannot_be_fetched_fails_staging() -> None:
+    respx.get("https://files.example/gone.mid").respond(404)
+
+    with pytest.raises(StagingError, match=r"gone\.mid"):
+        await stager(KeptFiles()).stage("7/midi", "https://files.example/gone.mid", "file")
 
 
 def queue_parody(session: Session, services: Services) -> int:

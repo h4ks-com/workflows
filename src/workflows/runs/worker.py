@@ -24,10 +24,11 @@ from workflows.runs.jobs import note
 from workflows.runs.jobs import queued_jobs
 from workflows.runs.jobs import running_job
 from workflows.runs.jobs import start
+from workflows.runs.media import InputKind
 from workflows.runs.media import MediaStager
 from workflows.runs.media import StagedMedia
 from workflows.runs.media import StagingError
-from workflows.runs.media import media_fields
+from workflows.runs.media import staged_fields
 from workflows.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -45,10 +46,10 @@ class Dispatch:
 
 @dataclass(frozen=True)
 class Candidate:
-    """The next job to start, with the audio links we download before dispatching it."""
+    """The next job to start, with the upload links we download before dispatching it."""
 
     job_id: int
-    links: dict[str, str]
+    links: dict[str, tuple[str, InputKind]]
 
 
 @dataclass(frozen=True)
@@ -154,9 +155,13 @@ class QueueWorker:
             fail(session, job, RETIRED_ERROR)
             changed.append(job)
             return None
-        fields = media_fields(job_type.form) if self._stager else []
-        links = {name: str(job.params[name]) for name in fields if job.params.get(name)}
-        for link in links.values():
+        fields = staged_fields(job_type.form) if self._stager else {}
+        links = {
+            name: (str(job.params[name]), kind)
+            for name, kind in fields.items()
+            if job.params.get(name)
+        }
+        for link, _ in links.values():
             note(session, job, f"downloading {link}")
         return Candidate(job.id, links)
 
@@ -164,9 +169,9 @@ class QueueWorker:
         media: dict[str, StagedMedia] = {}
         if self._stager is None:
             return Staged(media)
-        for name, link in candidate.links.items():
+        for name, (link, kind) in candidate.links.items():
             try:
-                media[name] = await self._stager.stage(f"{candidate.job_id}/{name}", link)
+                media[name] = await self._stager.stage(f"{candidate.job_id}/{name}", link, kind)
             except StagingError as error:
                 return Staged(media, str(error))
         return Staged(media)

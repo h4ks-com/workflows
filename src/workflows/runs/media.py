@@ -4,8 +4,11 @@ import tempfile
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
+from pathlib import PurePosixPath
+from typing import Literal
 from typing import Protocol
 from urllib.parse import unquote
+from urllib.parse import urlparse
 
 import httpx
 from minio import Minio
@@ -18,7 +21,11 @@ from workflows.settings import Settings
 DOWNLOAD_TIMEOUT_SECONDS = 1800.0
 SIGNED_URL_LIFETIME = timedelta(hours=12)
 CHUNK_BYTES = 1 << 20
+FILE_LIMIT_BYTES = 500 << 20
 YTDL_API_KEY_HEADER = "x-api-key"
+MIDI_TYPES = {"audio/midi", "audio/x-midi"}
+
+type InputKind = Literal["audio", "file"]
 
 
 class StagingError(Exception):
@@ -57,13 +64,24 @@ class YtdlError(BaseModel):
     detail: str
 
 
-def media_fields(form: Form) -> list[str]:
-    """Name the link fields that take audio, whose links we download before dispatch."""
-    return [
-        spec.name
+def _takes_audio(accept: str) -> bool:
+    return any(
+        kind.strip().startswith("audio/") and kind.strip() not in MIDI_TYPES
+        for kind in accept.split(",")
+    )
+
+
+def staged_fields(form: Form) -> dict[str, InputKind]:
+    """Name the upload fields whose links we download before dispatch, and how.
+
+    Audio goes through yt-dlp, which reads any page with a song on it; other files, such as
+    MIDI, we fetch as they are.
+    """
+    return {
+        spec.name: "audio" if _takes_audio(spec.accept) else "file"
         for spec in form.fields
-        if spec.value_type == "url" and spec.accept is not None and "audio/" in spec.accept
-    ]
+        if spec.value_type == "url" and spec.accept is not None
+    }
 
 
 def _reason(response: httpx.Response) -> str:
@@ -91,38 +109,58 @@ class MediaStager:
         self._ytdl_api_key = ytdl_api_key
         self._store = store
 
-    async def stage(self, key: str, url: str) -> StagedMedia:
-        """Download the audio behind `url` and store it under `key`.
+    async def stage(self, key: str, url: str, kind: InputKind) -> StagedMedia:
+        """Download the file behind `url` and store it under `key`.
 
         :raises StagingError: when the link cannot be downloaded.
         """
+        if kind == "audio":
+            request = self._http.stream(
+                "POST",
+                f"{self._ytdl_url}/v1/file",
+                json={"url": url, "mode": "audio"},
+                headers={YTDL_API_KEY_HEADER: self._ytdl_api_key},
+                timeout=DOWNLOAD_TIMEOUT_SECONDS,
+            )
+        else:
+            request = self._http.stream(
+                "GET", url, follow_redirects=True, timeout=DOWNLOAD_TIMEOUT_SECONDS
+            )
         with tempfile.TemporaryDirectory() as workdir:
             path = Path(workdir) / "media"
             try:
-                async with self._http.stream(
-                    "POST",
-                    f"{self._ytdl_url}/v1/file",
-                    json={"url": url, "mode": "audio"},
-                    headers={YTDL_API_KEY_HEADER: self._ytdl_api_key},
-                    timeout=DOWNLOAD_TIMEOUT_SECONDS,
-                ) as response:
+                async with request as response:
                     if response.is_error:
                         await response.aread()
                         raise StagingError(f"could not download {url}: {_reason(response)}")
-                    with path.open("wb") as file:
-                        async for chunk in response.aiter_bytes(CHUNK_BYTES):
-                            file.write(chunk)
+                    await _save(response, path, url)
                     headers = response.headers
             except httpx.HTTPError as error:
                 raise StagingError(f"could not download {url}") from error
             content_type = headers.get("content-type", "application/octet-stream")
-            suffix = mimetypes.guess_extension(content_type.split(";")[0]) or ""
-            signed = await self._store.keep(f"{key}{suffix}", path, content_type)
+            suffix = (
+                PurePosixPath(urlparse(url).path).suffix
+                if kind == "file"
+                else mimetypes.guess_extension(content_type.split(";")[0])
+            )
+            signed = await self._store.keep(f"{key}{suffix or ''}", path, content_type)
         return StagedMedia(
             url=signed,
             title=unquote(headers.get("x-media-title", "")),
             duration_seconds=_duration(headers.get("x-media-duration", "")),
         )
+
+
+async def _save(response: httpx.Response, path: Path, url: str) -> None:
+    written = 0
+    with path.open("wb") as file:
+        async for chunk in response.aiter_bytes(CHUNK_BYTES):
+            written += len(chunk)
+            if written > FILE_LIMIT_BYTES:
+                raise StagingError(
+                    f"could not download {url}: it is over {FILE_LIMIT_BYTES >> 20} MB"
+                )
+            file.write(chunk)
 
 
 def build_stager(settings: Settings, http: httpx.AsyncClient) -> MediaStager | None:
